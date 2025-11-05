@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout | FlowPay</title>
+<style>
+  :root {
+    --stripe-blue: #635bff;
+    --bg: #f6f9fc;
+    --card-bg: #fff;
+    --input-bg: #f7f8fa;
+    --border: #dcdfe6;
+    --text: #32325d;
+  }
+
+  * {
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .checkout-card {
+    background: var(--card-bg);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(50, 50, 93, 0.1);
+    width: 380px;
+    padding: 30px;
+  }
+
+  .title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+
+  label {
+    font-size: 0.9rem;
+    color: #6b7c93;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--input-bg);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    outline: none;
+  }
+
+  input:focus {
+    border-color: var(--stripe-blue);
+    background: #fff;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .row .field {
+    flex: 1;
+  }
+
+  button {
+    width: 100%;
+    background: var(--stripe-blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 0;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  button:hover {
+    background: #5246ff;
+  }
+
+  .footer {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #8898aa;
+    margin-top: 14px;
+  }
+
+  .success {
+    color: #3cb878;
+    text-align: center;
+    font-weight: 600;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="checkout-card">
+  <div class="title">Complete your payment</div>
+  <div class="field">
+    <label for="name">Name on card</label>
+    <input id="name" placeholder="Jane Doe">
+  </div>
+
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="jane@example.com">
+  </div>
+
+  <div class="field">
+    <label for="card-number">Card number</label>
+    <input id="card-number" maxlength="19" placeholder="4242 4242 4242 4242">
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="expiry">Expiry</label>
+      <input id="expiry" maxlength="5" placeholder="MM/YY">
+    </div>
+    <div class="field">
+      <label for="cvc">CVC</label>
+      <input id="cvc" maxlength="4" placeholder="123">
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="country">Country</label>
+    <select id="country">
+      <option>South Korea</option>
+      <option>United States</option>
+      <option>Japan</option>
+      <option>Canada</option>
+    </select>
+  </div>
+
+  <button id="pay-btn">Pay ₩29,000</button>
+  <div class="success" id="success-msg" style="display:none;">✅ Payment successful!</div>
+  <div class="footer">Secured by FlowPay</div>
+</div>
+
+<script>
+const cardNumber = document.getElementById('card-number');
+cardNumber.addEventListener('input', e => {
+  let val = e.target.value.replace(/\D/g, '');
+  e.target.value = val.replace(/(.{4})/g, '$1 ').trim();
+});
+
+const expiry = document.getElementById('expiry');
+expiry.addEventListener('input', e => {
+  let val = e.target.value.replace(/\D/g, '');
+  if (val.length > 2) val = val.slice(0, 2) + '/' + val.slice(2);
+  e.target.value = val;
+});
+
+document.getElementById('pay-btn').addEventListener('click', () => {
+  const btn = document.getElementById('pay-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  setTimeout(() => {
+    btn.textContent = 'Pay ₩39,000';
+    btn.disabled = false;
+    document.getElementById('success-msg').style.display = 'block';
+  }, 1500);
+});
+</script>
+</body>
+</html>
