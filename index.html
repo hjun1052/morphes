@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MORPHES</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 로그인 페이지 -->
+    <div id="login-page" class="page active">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo">
+                        <img src="logo.png" alt="MORPHES Logo" width="128" height="128">
+                    </div>
+                    <h1>MORPHES</h1>
+                    <p class="subtitle">AI 프롬프트 재작성.</p>
+                </div>
+                
+                <form id="login-form" class="login-form">
+                    <div class="form-group">
+                        <label for="login-email">이메일</label>
+                        <input type="email" id="login-email" placeholder="your@email.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="login-password">비밀번호</label>
+                        <input type="password" id="login-password" placeholder="••••••••" required>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary btn-full">로그인</button>
+                    
+                    <div class="login-footer">
+                        <p>데모 계정: demo@MORPHES.com / demo1234</p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메인 애플리케이션 -->
+    <div id="app-page" class="page">
+        <!-- 사이드바 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-small">
+                    <img src="logo.png" alt="MORPHES Logo" width="48" height="48">
+                    <span>MORPHES</span>
+                </div>
+                <button class="btn-new-chat" id="new-chat-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    새 대화
+                </button>
+            </div>
+            
+            <div class="chat-history" id="chat-history">
+                <!-- 대화 기록이 여기에 동적으로 추가됩니다 -->
+            </div>
+            
+            <div class="sidebar-footer">
+                <button class="sidebar-btn sidebar-upgrade" id="upgrade-btn">
+                    <div class="sidebar-upgrade-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 4L14.5 10.5L21 11L16 15L17.5 21L12 17.75L6.5 21L8 15L3 11L9.5 10.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="sidebar-upgrade-text">
+                        <span class="title">Pro로 업그레이드</span>
+                        <span class="subtitle">무제한 재작성</span>
+                    </div>
+                </button>
+                <button class="sidebar-btn" id="settings-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 12.5C11.3807 12.5 12.5 11.3807 12.5 10C12.5 8.61929 11.3807 7.5 10 7.5C8.61929 7.5 7.5 8.61929 7.5 10C7.5 11.3807 8.61929 12.5 10 12.5Z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M16.25 10C16.25 10.4375 16.2188 10.8438 16.1875 11.25L18.0938 12.6875C18.25 12.8125 18.2812 13.0625 18.1875 13.25L16.4062 16.25C16.3125 16.4375 16.0938 16.5 15.9062 16.4375L13.6562 15.5625C13.2188 15.9062 12.75 16.1875 12.2188 16.4062L11.875 18.7812C11.8438 19 11.6562 19.1562 11.4375 19.1562H7.875C7.65625 19.1562 7.46875 19 7.4375 18.7812L7.09375 16.4062C6.5625 16.1875 6.09375 15.9062 5.65625 15.5625L3.40625 16.4375C3.21875 16.5 3 16.4375 2.90625 16.25L1.125 13.25C1.03125 13.0625 1.0625 12.8125 1.21875 12.6875L3.125 11.25C3.09375 10.8438 3.0625 10.4375 3.0625 10C3.0625 9.5625 3.09375 9.15625 3.125 8.75L1.21875 7.3125C1.0625 7.1875 1.03125 6.9375 1.125 6.75L2.90625 3.75C3 3.5625 3.21875 3.5 3.40625 3.5625L5.65625 4.4375C6.09375 4.09375 6.5625 3.8125 7.09375 3.59375L7.4375 1.21875C7.46875 1 7.65625 0.84375 7.875 0.84375H11.4375C11.6562 0.84375 11.8438 1 11.875 1.21875L12.2188 3.59375C12.75 3.8125 13.2188 4.09375 13.6562 4.4375L15.9062 3.5625C16.0938 3.5 16.3125 3.5625 16.4062 3.75L18.1875 6.75C18.2812 6.9375 18.25 7.1875 18.0938 7.3125L16.1875 8.75C16.2188 9.15625 16.25 9.5625 16.25 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    설정
+                </button>
+                <button class="sidebar-btn" id="logout-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M7.5 17.5H4.16667C3.72464 17.5 3.30072 17.3244 2.98816 17.0118C2.67559 16.6993 2.5 16.2754 2.5 15.8333V4.16667C2.5 3.72464 2.67559 3.30072 2.98816 2.98816C3.30072 2.67559 3.72464 2.5 4.16667 2.5H7.5M13.3333 14.1667L17.5 10M17.5 10L13.3333 5.83333M17.5 10H7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    로그아웃
+                </button>
+            </div>
+        </aside>
+
+        <!-- 메인 컨텐츠 -->
+        <main class="main-content">
+            <div class="chat-container">
+                <!-- 채팅 헤더 -->
+                <div class="chat-header">
+                    <button class="btn-toggle-sidebar" id="toggle-sidebar">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    
+                    <div class="service-selector">
+                        <label for="ai-service">대상 AI 서비스</label>
+                        <select id="ai-service" class="service-dropdown">
+                            <option value="chatgpt">ChatGPT</option>
+                            <option value="claude">Claude</option>
+                            <option value="gemini">Gemini</option>
+                            <option value="perplexity">Perplexity</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 채팅 메시지 영역 -->
+                <div class="messages-container" id="messages-container">
+                    <div class="welcome-screen" id="welcome-screen">
+                        <div class="welcome-icon">
+                            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                                <rect width="64" height="64" rx="16" fill="#FFF5F0"/>
+                                <path d="M21 18L32 32L21 46M35 46H48" stroke="#FF6B35" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h2>MORPHES에 오신 것을 환영합니다</h2>
+                        <p>원하시는 프롬프트를 자연스러운 대화로 만들어보세요</p>
+                        <div class="example-prompts">
+                            <button class="example-prompt">블로그 글 작성 프롬프트 만들기</button>
+                            <button class="example-prompt">코드 리뷰 프롬프트 생성</button>
+                            <button class="example-prompt">데이터 분석 도우미 프롬프트</button>
+                            <button class="example-prompt">창의적 글쓰기 프롬프트</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 입력 영역 -->
+                <div class="input-container">
+                    <form id="chat-form" class="chat-form">
+                        <textarea 
+                            id="message-input" 
+                            placeholder="어떤 프롬프트를 만들고 싶으신가요? (Shift + Enter로 줄바꿈)"
+                            rows="1"
+                        ></textarea>
+                        <button type="submit" class="btn-send" id="send-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 설정 모달 -->
+    <div class="modal" id="settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>설정</h2>
+                <button class="btn-close" id="close-settings">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="openai-api-key">OpenAI API Key</label>
+                    <input type="password" id="openai-api-key" placeholder="sk-...">
+                    <p class="help-text">API 키는 브라우저에만 저장되며 외부로 전송되지 않습니다</p>
+                </div>
+                <button class="btn-primary" id="save-settings">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 요금제 모달 -->
+    <div class="modal" id="pricing-modal">
+        <div class="modal-content pricing-modal-content">
+            <div class="modal-header">
+                <h2>Pro로 업그레이드</h2>
+                <button class="btn-close" id="close-pricing">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body pricing-body">
+                <div class="billing-toggle">
+                    <button class="billing-option active" data-billing-option="monthly">월간</button>
+                    <button class="billing-option" data-billing-option="yearly">
+                        연간
+                        <span class="billing-badge">-17%</span>
+                    </button>
+                </div>
+                <div class="pricing-grid">
+                    <div class="plan-card" data-plan="free">
+                        <div class="plan-header">
+                            <span class="plan-tier">FREE</span>
+                            <span class="plan-subtitle">무료 체험</span>
+                        </div>
+                        <div class="plan-price">
+                            <span class="plan-amount" data-price-monthly="0원" data-price-yearly="0원">0원</span>
+                            <span class="plan-period" data-period-monthly="/ 월" data-period-yearly="/ 월">/ 월</span>
+                        </div>
+                        <ul class="plan-features">
+                            <li>기본 재작성 기능</li>
+                            <li>일 10회 제한</li>
+                            <li>커뮤니티 지원</li>
+                        </ul>
+                        <button class="plan-cta secondary">시작하기</button>
+                    </div>
+                    <div class="plan-card popular" data-plan="pro">
+                        <div class="plan-tag">POPULAR</div>
+                        <div class="plan-header">
+                            <span class="plan-tier">Pro</span>
+                            <span class="plan-subtitle" data-label-monthly="29,000원/ 월" data-label-yearly="288,000원/ 년">29,000원/ 월</span>
+                        </div>
+                        <div class="plan-price">
+                            <span class="plan-amount" data-price-monthly="29,000원" data-price-yearly="288,000원">29,000원</span>
+                            <span class="plan-period" data-period-monthly="/ 월" data-period-yearly="/ 년">/ 월</span>
+                        </div>
+                        <div class="plan-note" data-label-monthly="월간 결제" data-label-yearly="연간 결제 (17% 할인)">월간 결제</div>
+                        <ul class="plan-features">
+                            <li>무제한 재작성</li>
+                            <li>우선 처리</li>
+                            <li>고급 커스터마이징</li>
+                            <li>API 액세스</li>
+                        </ul>
+                        <button class="plan-cta primary">구독하기</button>
+                    </div>
+                    <div class="plan-card" data-plan="enterprise">
+                        <div class="plan-header">
+                            <span class="plan-tier">ENTERPRISE</span>
+                            <span class="plan-subtitle">기업용</span>
+                        </div>
+                        <div class="plan-price">
+                            <span class="plan-amount" data-price-monthly="문의" data-price-yearly="문의">문의</span>
+                            <span class="plan-period" data-period-monthly="" data-period-yearly=""></span>
+                        </div>
+                        <ul class="plan-features">
+                            <li>맞춤형 통합</li>
+                            <li>전담 매니저</li>
+                            <li>SLA 보장</li>
+                            <li>온프레미스 옵션</li>
+                        </ul>
+                        <button class="plan-cta secondary">문의하기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
