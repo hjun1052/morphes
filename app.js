@@ -2,10 +2,16 @@
 const APP_STATE = {
     currentUser: null,
     currentChatId: null,
-   chats: {},
+    chats: {},
     apiKey: null,
     selectedPromptOption: null,
-    conversationHistory: []
+    conversationHistory: [],
+    userProfile: null,
+    memories: [],
+    projects: {},
+    promptLibrary: [],
+    promptGallery: [],
+    currentProjectId: null
 };
 
 const SELECTION_ASSIST = {
@@ -17,6 +23,92 @@ const SELECTION_ASSIST = {
     abortController: null,
     requestId: 0
 };
+
+const ONBOARDING_QUESTIONS = [
+    {
+        id: 'role',
+        title: '주로 어떤 역할로 MORPHES를 사용하시나요?',
+        options: [
+            { value: 'creator', label: '콘텐츠 크리에이터', description: '블로그·뉴스레터·SNS' },
+            { value: 'developer', label: '개발자 / 엔지니어', description: '기술 문서·코드 해설' },
+            { value: 'marketer', label: '마케팅/기획', description: '캠페인·전략·GTM' },
+            { value: 'educator', label: '교육·강의', description: '수업 자료·학습 가이드' }
+        ]
+    },
+    {
+        id: 'goal',
+        title: '이번 프로젝트에서 가장 중요한 것은 무엇인가요?',
+        options: [
+            { value: 'speed', label: '빠른 초안 생성', description: '아이디어를 재빠르게 확인' },
+            { value: 'quality', label: '완성도 높은 품질', description: '디테일과 정확도가 최우선' },
+            { value: 'experiment', label: '새로운 시도', description: '다양한 버전을 실험하고 싶어요' },
+            { value: 'consistency', label: '브랜드 일관성', description: '톤 & 메시지 유지' }
+        ]
+    },
+    {
+        id: 'tone',
+        title: 'AI가 어떤 말투로 응답하면 좋을까요?',
+        options: [
+            { value: 'professional', label: '전문적이고 격식 있는 톤', description: '보고서·비즈니스용' },
+            { value: 'friendly', label: '친근하고 대화체', description: '가볍고 읽기 쉬운 톤' },
+            { value: 'playful', label: '재치 있고 창의적인', description: '아이디어 발상·크리에이티브' }
+        ]
+    },
+    {
+        id: 'structure',
+        title: '원하는 출력 형태를 골라주세요',
+        options: [
+            { value: 'step_by_step', label: '단계별 가이드', description: '1,2,3 순서대로 정리' },
+            { value: 'checklist', label: '체크리스트', description: '항목별 점검 포맷' },
+            { value: 'narrative', label: '자연스러운 서술형', description: '문단 중심 서술' },
+            { value: 'bullets', label: '요약된 불릿', description: '핵심만 빠르게' }
+        ]
+    }
+];
+
+const DEFAULT_PROMPT_GALLERY = [
+    {
+        id: 'gallery_brand_voice',
+        title: '브랜드 톤 가이던스',
+        description: '신규 브랜드의 톤 & 메시지를 정의하는 구조화된 질문 세트',
+        tags: ['브랜드', '전략', '톤'],
+        prompt: `You are a senior brand strategist helping a marketing team define a new brand voice.
+Ask for: core audience, emotional keywords, forbidden phrases, sample copy. Output a short style guide that includes:
+- Elevator pitch (two sentences)
+- Voice principles (3 bullet points)
+- Sample paragraph written in the new tone.
+Never invent facts—only use the details provided.`
+    },
+    {
+        id: 'gallery_code_review',
+        title: '코드 리뷰 코파일럿',
+        description: 'Pull Request 설명문을 더 구조화된 리뷰로 변환',
+        tags: ['개발', '리뷰'],
+        prompt: `You are a staff-level engineer conducting a structured pull-request review.
+Given: PR description + diff summary.
+Respond with sections:
+1. Summary (2 bullet points)
+2. Strengths (max 3 bullets)
+3. Risks / Questions (max 3 bullets)
+4. Action items (if any)
+Keep tone concise and constructive.`
+    },
+    {
+        id: 'gallery_research_brief',
+        title: '리서치 브리프 생성기',
+        description: '사용자 인터뷰 메모를 인사이트와 액션으로 정리',
+        tags: ['리서치', '요약'],
+        prompt: `You are a UX researcher.
+Input: raw interview notes.
+Output:
+- Key insights (3 bullets)
+- Evidence quotes mapped to each insight
+- Recommended experiments or product changes
+Use markdown tables when presenting quotes.`
+    }
+];
+
+let currentSettingsSection = 'general';
 
 // OpenAI Function Definitions
 const FUNCTIONS = [
@@ -135,6 +227,26 @@ const FUNCTIONS = [
             required: ['survey_id', 'prompt', 'survey_type']
         }
     }
+    ,
+    {
+        name: 'remember_memory',
+        description: '사용자와의 대화에서 얻은 중요 정보를 저장합니다.',
+        parameters: {
+            type: 'object',
+            properties: {
+                note: {
+                    type: 'string',
+                    description: '기억해야 할 간단한 문장'
+                },
+                tags: {
+                    type: 'array',
+                    description: '메모리를 분류할 태그 목록',
+                    items: { type: 'string' }
+                }
+            },
+            required: ['note']
+        }
+    }
 ];
 
 // 시스템 프롬프트
@@ -241,6 +353,59 @@ class StorageManager {
     static clearUser() {
         this.remove('promptcraft_user');
     }
+
+    static saveUserProfile(userId, profile) {
+        if (!userId) return;
+        this.save(`promptcraft_profile_${userId}`, profile);
+    }
+
+    static loadUserProfile(userId) {
+        if (!userId) return null;
+        return this.load(`promptcraft_profile_${userId}`);
+    }
+
+    static clearUserProfile(userId) {
+        if (!userId) return;
+        this.remove(`promptcraft_profile_${userId}`);
+    }
+
+    static saveMemories(userId, memories) {
+        if (!userId) return;
+        this.save(`promptcraft_memories_${userId}`, memories);
+    }
+
+    static loadMemories(userId) {
+        if (!userId) return [];
+        return this.load(`promptcraft_memories_${userId}`) || [];
+    }
+
+    static saveProjects(userId, projects) {
+        if (!userId) return;
+        this.save(`promptcraft_projects_${userId}`, projects);
+    }
+
+    static loadProjects(userId) {
+        if (!userId) return {};
+        return this.load(`promptcraft_projects_${userId}`) || {};
+    }
+
+    static savePromptLibrary(userId, prompts) {
+        if (!userId) return;
+        this.save(`promptcraft_prompt_library_${userId}`, prompts);
+    }
+
+    static loadPromptLibrary(userId) {
+        if (!userId) return [];
+        return this.load(`promptcraft_prompt_library_${userId}`) || [];
+    }
+
+    static savePromptGallery(entries) {
+        this.save('promptcraft_prompt_gallery', entries);
+    }
+
+    static loadPromptGallery() {
+        return this.load('promptcraft_prompt_gallery');
+    }
 }
 
 // DOM 요소
@@ -252,13 +417,19 @@ const elements = {
     // 사이드바
     newChatBtn: document.getElementById('new-chat-btn'),
     chatHistory: document.getElementById('chat-history'),
+    projectMenuToggle: document.getElementById('project-menu-toggle'),
+    projectMenu: document.getElementById('project-menu'),
+    projectMenuCreate: document.getElementById('project-menu-create'),
+    projectMenuManage: document.getElementById('project-menu-manage'),
+    projectSidebar: document.getElementById('project-sidebar'),
     settingsBtn: document.getElementById('settings-btn'),
-    logoutBtn: document.getElementById('logout-btn'),
+
     toggleSidebarBtn: document.getElementById('toggle-sidebar'),
     
     // 채팅
     messagesContainer: document.getElementById('messages-container'),
     welcomeScreen: document.getElementById('welcome-screen'),
+    projectView: document.getElementById('project-view'),
     chatForm: document.getElementById('chat-form'),
     messageInput: document.getElementById('message-input'),
     sendBtn: document.getElementById('send-btn'),
@@ -269,9 +440,41 @@ const elements = {
     closeSettings: document.getElementById('close-settings'),
     openaiApiKeyInput: document.getElementById('openai-api-key'),
     saveSettingsBtn: document.getElementById('save-settings'),
+    settingsLogoutBtn: document.getElementById('settings-logout-btn'),
+    accountEmailLabel: document.getElementById('account-email'),
     upgradeBtn: document.getElementById('upgrade-btn'),
     pricingModal: document.getElementById('pricing-modal'),
-    closePricing: document.getElementById('close-pricing')
+    closePricing: document.getElementById('close-pricing'),
+    settingsNav: document.getElementById('settings-nav'),
+    memoryForm: document.getElementById('memory-form'),
+    memoryInput: document.getElementById('memory-text'),
+    memoryList: document.getElementById('memory-list'),
+
+    // 프로젝트
+    projectsModal: document.getElementById('projects-modal'),
+    closeProjects: document.getElementById('close-projects'),
+    projectForm: document.getElementById('project-form'),
+    projectNameInput: document.getElementById('project-name'),
+    projectDescInput: document.getElementById('project-description'),
+    projectFileInput: document.getElementById('project-files'),
+    projectList: document.getElementById('project-list'),
+
+    // 라이브러리 & 갤러리
+    libraryBtn: document.getElementById('library-btn'),
+    libraryModal: document.getElementById('library-modal'),
+    closeLibrary: document.getElementById('close-library'),
+    libraryList: document.getElementById('library-list'),
+    galleryBtn: document.getElementById('gallery-btn'),
+    galleryModal: document.getElementById('gallery-modal'),
+    closeGallery: document.getElementById('close-gallery'),
+    galleryList: document.getElementById('gallery-list'),
+
+    // 온보딩
+    onboardingModal: document.getElementById('onboarding-modal'),
+    onboardingQuestions: document.getElementById('onboarding-questions'),
+    submitOnboardingBtn: document.getElementById('submit-onboarding'),
+    closeOnboardingBtn: document.getElementById('close-onboarding'),
+    editProfileBtn: document.getElementById('edit-profile-btn')
 };
 
 // 초기화
@@ -285,6 +488,12 @@ function init() {
 
     APP_STATE.chats = StorageManager.loadChats();
     APP_STATE.apiKey = StorageManager.loadApiKey();
+    APP_STATE.userProfile = StorageManager.loadUserProfile(APP_STATE.currentUser.email);
+    APP_STATE.memories = StorageManager.loadMemories(APP_STATE.currentUser.email);
+    APP_STATE.projects = StorageManager.loadProjects(APP_STATE.currentUser.email);
+    APP_STATE.promptLibrary = StorageManager.loadPromptLibrary(APP_STATE.currentUser.email);
+    APP_STATE.promptGallery = StorageManager.loadPromptGallery() || DEFAULT_PROMPT_GALLERY;
+    normalizeProjects();
 
     if (APP_STATE.apiKey && elements.openaiApiKeyInput) {
         elements.openaiApiKeyInput.value = APP_STATE.apiKey;
@@ -301,6 +510,7 @@ function init() {
 
     // 채팅 기록 렌더링
     renderChatHistory();
+    renderProjectSidebar();
 
     const chatIds = Object.keys(APP_STATE.chats);
     if (chatIds.length > 0) {
@@ -310,19 +520,45 @@ function init() {
     }
 
     completeAppLoading();
+    updateAccountInfo();
+    maybeShowOnboardingModal();
 }
 
 // 이벤트 리스너 등록
 function registerEventListeners() {
     // 사이드바
     if (elements.newChatBtn) {
-        elements.newChatBtn.addEventListener('click', createNewChat);
+        elements.newChatBtn.addEventListener('click', () => {
+            closeProjectMenu();
+            createNewChat();
+        });
+    }
+    if (elements.projectMenuToggle) {
+        elements.projectMenuToggle.addEventListener('click', toggleProjectMenu);
+    }
+    if (elements.projectMenuCreate) {
+        elements.projectMenuCreate.addEventListener('click', () => {
+            closeProjectMenu();
+            renderProjectList();
+            if (elements.projectsModal) {
+                openModal(elements.projectsModal);
+            }
+            if (elements.projectNameInput) {
+                elements.projectNameInput.focus();
+            }
+        });
+    }
+    if (elements.projectMenuManage) {
+        elements.projectMenuManage.addEventListener('click', () => {
+            closeProjectMenu();
+            renderProjectList();
+            if (elements.projectsModal) {
+                openModal(elements.projectsModal);
+            }
+        });
     }
     if (elements.settingsBtn) {
-        elements.settingsBtn.addEventListener('click', () => openModal(elements.settingsModal));
-    }
-    if (elements.logoutBtn) {
-        elements.logoutBtn.addEventListener('click', handleLogout);
+        elements.settingsBtn.addEventListener('click', () => openSettingsModal('general'));
     }
     if (elements.toggleSidebarBtn) {
         elements.toggleSidebarBtn.addEventListener('click', toggleSidebar);
@@ -356,6 +592,69 @@ function registerEventListeners() {
     if (elements.saveSettingsBtn) {
         elements.saveSettingsBtn.addEventListener('click', saveSettings);
     }
+    if (elements.settingsLogoutBtn) {
+        elements.settingsLogoutBtn.addEventListener('click', handleLogout);
+    }
+
+    if (elements.submitOnboardingBtn) {
+        elements.submitOnboardingBtn.addEventListener('click', handleOnboardingSubmit);
+    }
+    if (elements.closeOnboardingBtn) {
+        elements.closeOnboardingBtn.addEventListener('click', () => closeOnboardingModal());
+    }
+    if (elements.onboardingModal) {
+        elements.onboardingModal.addEventListener('click', (event) => {
+            if (event.target === elements.onboardingModal) {
+                closeOnboardingModal();
+            }
+        });
+    }
+    if (elements.editProfileBtn) {
+        elements.editProfileBtn.addEventListener('click', () => openOnboardingModal());
+    }
+
+    if (elements.closeProjects && elements.projectsModal) {
+        elements.closeProjects.addEventListener('click', () => closeModal(elements.projectsModal));
+    }
+    if (elements.projectForm) {
+        elements.projectForm.addEventListener('submit', handleProjectCreate);
+    }
+
+    if (elements.libraryBtn && elements.libraryModal) {
+        elements.libraryBtn.addEventListener('click', () => {
+            renderPromptLibrary();
+            openModal(elements.libraryModal);
+        });
+    }
+    if (elements.closeLibrary && elements.libraryModal) {
+        elements.closeLibrary.addEventListener('click', () => closeModal(elements.libraryModal));
+    }
+
+    if (elements.galleryBtn && elements.galleryModal) {
+        elements.galleryBtn.addEventListener('click', () => {
+            renderPromptGallery();
+            openModal(elements.galleryModal);
+        });
+    }
+    if (elements.closeGallery && elements.galleryModal) {
+        elements.closeGallery.addEventListener('click', () => closeModal(elements.galleryModal));
+    }
+
+    if (elements.memoryForm) {
+        elements.memoryForm.addEventListener('submit', handleMemorySubmit);
+    }
+
+    if (elements.settingsNav) {
+        elements.settingsNav.querySelectorAll('[data-settings-target]').forEach(tab => {
+            tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTarget));
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (!elements.projectMenu || !elements.projectMenuToggle) return;
+        if (elements.projectMenu.contains(event.target) || elements.projectMenuToggle.contains(event.target)) return;
+        closeProjectMenu();
+    });
 
     window.addEventListener('resize', handleWindowResize);
 }
@@ -378,6 +677,646 @@ function handlePromptStarterClick(event) {
     elements.messageInput.value = promptText.trim();
     elements.messageInput.focus();
     autoResizeTextarea({ target: elements.messageInput });
+}
+
+function openSettingsModal(section = 'general') {
+    if (!elements.settingsModal) return;
+    setSettingsSection(section);
+    if (section === 'memory') {
+        renderMemoryList();
+    }
+    openModal(elements.settingsModal);
+}
+
+function setSettingsSection(section) {
+    currentSettingsSection = section;
+    if (elements.settingsNav) {
+        elements.settingsNav.querySelectorAll('[data-settings-target]').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.settingsTarget === section);
+        });
+    }
+    document.querySelectorAll('[data-settings-panel]').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.settingsPanel === section);
+    });
+    if (section === 'memory') {
+        renderMemoryList();
+    }
+    if (section === 'account') {
+        updateAccountInfo();
+    }
+}
+
+function updateAccountInfo() {
+    if (!elements.accountEmailLabel) return;
+    const email = APP_STATE.currentUser?.email || '알 수 없음';
+    elements.accountEmailLabel.textContent = `로그인된 이메일: ${email}`;
+}
+
+function maybeShowOnboardingModal(force = false) {
+    if (!elements.onboardingModal) return;
+    const hasProfile = APP_STATE.userProfile && Object.keys(APP_STATE.userProfile.selections || {}).length === ONBOARDING_QUESTIONS.length;
+    if (force || !hasProfile) {
+        openOnboardingModal();
+    }
+}
+
+function openOnboardingModal() {
+    if (!elements.onboardingModal) return;
+    renderOnboardingQuestions();
+    elements.onboardingModal.classList.add('active');
+}
+
+function closeOnboardingModal() {
+    if (!elements.onboardingModal) return;
+    elements.onboardingModal.classList.remove('active');
+}
+
+function renderOnboardingQuestions() {
+    const container = elements.onboardingQuestions;
+    if (!container) return;
+    
+    const selections = APP_STATE.userProfile?.selections || {};
+    container.innerHTML = '';
+    
+    ONBOARDING_QUESTIONS.forEach(question => {
+        const section = document.createElement('div');
+        section.className = 'onboarding-question';
+        
+        const title = document.createElement('h3');
+        title.textContent = question.title;
+        section.appendChild(title);
+        
+        const optionWrap = document.createElement('div');
+        optionWrap.className = 'onboarding-options';
+        
+        question.options.forEach(option => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'onboarding-option';
+            button.dataset.questionId = question.id;
+            button.dataset.value = option.value;
+            button.innerHTML = `
+                <span class="onboarding-option-title">${option.label}</span>
+                <span class="onboarding-option-desc">${option.description || ''}</span>
+            `;
+            if (selections[question.id]?.value === option.value) {
+                button.classList.add('active');
+            }
+            button.addEventListener('click', () => setOnboardingSelection(question.id, option.value));
+            optionWrap.appendChild(button);
+        });
+        
+        section.appendChild(optionWrap);
+        container.appendChild(section);
+    });
+}
+
+function toggleProjectMenu() {
+    if (!elements.projectMenu) return;
+    elements.projectMenu.classList.toggle('hidden');
+}
+
+function closeProjectMenu() {
+    if (!elements.projectMenu) return;
+    elements.projectMenu.classList.add('hidden');
+}
+
+function setOnboardingSelection(questionId, value) {
+    if (!elements.onboardingQuestions) return;
+    const options = elements.onboardingQuestions.querySelectorAll(`.onboarding-option[data-question-id="${questionId}"]`);
+    options.forEach(option => {
+        option.classList.toggle('active', option.dataset.value === value);
+    });
+}
+
+function collectOnboardingAnswers() {
+    if (!elements.onboardingQuestions) return null;
+    const answers = {};
+    
+    ONBOARDING_QUESTIONS.forEach(question => {
+        const active = elements.onboardingQuestions.querySelector(`.onboarding-option[data-question-id="${question.id}"].active`);
+        if (active) {
+            const selectedValue = active.dataset.value;
+            const optionMeta = question.options.find(opt => opt.value === selectedValue);
+            answers[question.id] = {
+                value: optionMeta?.value || selectedValue,
+                label: optionMeta?.label || selectedValue,
+                description: optionMeta?.description || ''
+            };
+        }
+    });
+    
+    return answers;
+}
+
+function handleOnboardingSubmit() {
+    const answers = collectOnboardingAnswers();
+    if (!answers) return;
+    
+    const answeredCount = Object.keys(answers).length;
+    if (answeredCount < ONBOARDING_QUESTIONS.length) {
+        alert('모든 질문에 대한 선호를 선택해주세요.');
+        return;
+    }
+    
+    const profile = {
+        selections: answers,
+        updatedAt: Date.now()
+    };
+    
+    APP_STATE.userProfile = profile;
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.saveUserProfile(APP_STATE.currentUser.email, profile);
+    }
+    
+    closeOnboardingModal();
+}
+
+function normalizeProjects() {
+    Object.keys(APP_STATE.projects || {}).forEach(projectId => {
+        const project = APP_STATE.projects[projectId];
+        if (!project) return;
+        project.chatIds = Array.isArray(project.chatIds) ? project.chatIds : [];
+        project.assets = Array.isArray(project.assets) ? project.assets : [];
+    });
+}
+
+// 프로젝트 관리
+function handleProjectCreate(e) {
+    e.preventDefault();
+    
+    const name = elements.projectNameInput.value.trim();
+    const description = elements.projectDescInput.value.trim();
+    if (!name) {
+        alert('프로젝트 이름을 입력해주세요.');
+        return;
+    }
+    
+    const projectId = `project_${Date.now()}`;
+    const assetFiles = elements.projectFileInput.files ? Array.from(elements.projectFileInput.files) : [];
+    
+    APP_STATE.projects[projectId] = {
+        id: projectId,
+        name,
+        description,
+        chatIds: [],
+        assets: assetFiles.map(file => ({
+            id: `${projectId}_asset_${file.lastModified}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            uploadedAt: Date.now()
+        }))
+    };
+    
+    persistProjects();
+    renderProjectList();
+    renderProjectSidebar();
+    e.target.reset();
+}
+
+function renderProjectList() {
+    if (!elements.projectList) return;
+    const projectEntries = Object.values(APP_STATE.projects);
+    
+    if (projectEntries.length === 0) {
+        elements.projectList.innerHTML = '<p class="help-text">아직 생성된 프로젝트가 없습니다.</p>';
+        return;
+    }
+    
+    elements.projectList.innerHTML = '';
+    
+    projectEntries.forEach(project => {
+        project.assets = project.assets || [];
+        project.chatIds = project.chatIds || [];
+        const card = document.createElement('div');
+        card.className = 'project-card';
+        card.innerHTML = `
+            <div class="project-card-header">
+                <div>
+                    <h4>${escapeHtml(project.name)}</h4>
+                    <p class="project-meta">${escapeHtml(project.description || '설명이 없습니다.')}</p>
+                </div>
+                <span class="project-meta">${project.chatIds.length}개의 채팅</span>
+            </div>
+            <div class="project-actions">
+                <button class="btn-secondary" data-project-action="assign" data-project-id="${project.id}">현재 채팅 연결</button>
+                <label class="btn-secondary upload-label">
+                    자료 업로드
+                    <input type="file" data-project-upload="${project.id}" multiple hidden>
+                </label>
+            </div>
+            <div class="project-asset-list">
+                <strong>자료 (${project.assets.length})</strong>
+                <ul>
+                    ${project.assets.length > 0 ? project.assets.map(asset => `<li>${escapeHtml(asset.name)} (${formatFileSize(asset.size)})</li>`).join('') : '<li>등록된 자료가 없습니다.</li>'}
+                </ul>
+            </div>
+        `;
+        
+        card.querySelector('[data-project-action="assign"]').addEventListener('click', () => assignCurrentChatToProject(project.id));
+        card.querySelector('[data-project-upload]').addEventListener('change', (event) => handleProjectAssetUpload(project.id, event.target));
+        
+        elements.projectList.appendChild(card);
+    });
+}
+
+function handleProjectAssetUpload(projectId, inputEl) {
+    const project = APP_STATE.projects[projectId];
+    if (!project || !inputEl || !inputEl.files || inputEl.files.length === 0) return;
+    
+    const files = Array.from(inputEl.files);
+    files.forEach(file => {
+        project.assets.push({
+            id: `${projectId}_asset_${file.lastModified}_${file.name}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            uploadedAt: Date.now()
+        });
+    });
+    
+    persistProjects();
+    renderProjectList();
+    inputEl.value = '';
+    renderProjectSidebar();
+}
+
+function assignCurrentChatToProject(projectId) {
+    if (!APP_STATE.currentChatId) {
+        alert('먼저 채팅을 선택하거나 생성해주세요.');
+        return;
+    }
+    const project = APP_STATE.projects[projectId];
+    if (!project) return;
+    
+    if (!project.chatIds.includes(APP_STATE.currentChatId)) {
+        attachChatToProject(APP_STATE.currentChatId, projectId);
+        renderProjectSidebar();
+        renderProjectList();
+        alert('현재 채팅이 프로젝트에 연결되었습니다.');
+    } else {
+        alert('이 채팅은 이미 해당 프로젝트에 연결되어 있습니다.');
+    }
+}
+
+function persistProjects() {
+    if (APP_STATE.currentUser?.email) {
+        normalizeProjects();
+        StorageManager.saveProjects(APP_STATE.currentUser.email, APP_STATE.projects);
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function renderProjectSidebar() {
+    if (!elements.projectSidebar) return;
+    const projectList = Object.values(APP_STATE.projects || {});
+    if (projectList.length === 0) {
+        APP_STATE.currentProjectId = null;
+        if (elements.projectView) {
+            elements.projectView.classList.add('hidden');
+            elements.projectView.classList.remove('active');
+            elements.projectView.innerHTML = '';
+        }
+        elements.projectSidebar.innerHTML = '<p class="project-sidebar-empty">프로젝트를 만들어보세요.</p>';
+        return;
+    }
+    
+    if (APP_STATE.currentProjectId && !APP_STATE.projects[APP_STATE.currentProjectId]) {
+        APP_STATE.currentProjectId = null;
+    }
+    
+    const itemsHtml = projectList.map(project => `
+        <div class="project-item ${project.id === APP_STATE.currentProjectId ? 'active' : ''}" data-project-id="${project.id}">
+            ${escapeHtml(project.name)}
+        </div>
+    `).join('');
+    
+    elements.projectSidebar.innerHTML = `
+        <p class="project-sidebar-title">프로젝트</p>
+        <div class="project-sidebar-items">${itemsHtml}</div>
+    `;
+    
+    elements.projectSidebar.querySelectorAll('.project-item').forEach(item => {
+        const projectId = item.dataset.projectId;
+        item.addEventListener('click', () => {
+            if (projectId === APP_STATE.currentProjectId) {
+                closeProjectView();
+            } else {
+                openProjectView(projectId);
+            }
+        });
+        item.addEventListener('contextmenu', (event) => handleProjectContextMenu(event, projectId));
+    });
+}
+
+function handleProjectContextMenu(event, projectId) {
+    event.preventDefault();
+    const project = APP_STATE.projects[projectId];
+    if (!project) return;
+    
+    const newName = prompt('프로젝트 이름을 수정하세요', project.name);
+    if (newName === null) return;
+    const trimmedName = newName.trim();
+    if (trimmedName) {
+        project.name = trimmedName;
+    }
+    const newDesc = prompt('프로젝트 설명을 수정하세요', project.description || '');
+    if (newDesc !== null) {
+        project.description = newDesc.trim();
+    }
+    
+    persistProjects();
+    renderProjectSidebar();
+    renderProjectList();
+    if (APP_STATE.currentProjectId === projectId) {
+        renderProjectView();
+    }
+}
+
+function openProjectView(projectId) {
+    if (!projectId || !APP_STATE.projects[projectId]) return;
+    APP_STATE.currentProjectId = projectId;
+    clearMessages();
+    hideWelcomeScreen();
+    renderProjectSidebar();
+    renderProjectView();
+}
+
+function closeProjectView() {
+    APP_STATE.currentProjectId = null;
+    if (elements.projectView) {
+        elements.projectView.classList.add('hidden');
+        elements.projectView.classList.remove('active');
+        elements.projectView.innerHTML = '';
+    }
+    renderProjectSidebar();
+    if (!APP_STATE.currentChatId) {
+        showWelcomeScreen();
+    }
+}
+
+function renderProjectView() {
+    const container = elements.projectView;
+    const projectId = APP_STATE.currentProjectId;
+    if (!container || !projectId || !APP_STATE.projects[projectId]) {
+        if (container) {
+            container.classList.add('hidden');
+            container.classList.remove('active');
+            container.innerHTML = '';
+        }
+        return;
+    }
+    
+    const project = APP_STATE.projects[projectId];
+    const chats = (project.chatIds || [])
+        .map(chatId => APP_STATE.chats[chatId])
+        .filter(Boolean)
+        .sort((a, b) => b.createdAt - a.createdAt);
+    
+    const chatListHtml = chats.length > 0
+        ? chats.map(chat => `
+            <div class="project-chat-item" data-chat-id="${chat.id}">
+                <h4>${escapeHtml(chat.title || '제목 없음')}</h4>
+                <div class="project-chat-meta">${new Date(chat.createdAt).toLocaleString()} · ${chat.messages.length}개의 메시지</div>
+            </div>
+        `).join('')
+        : '<p class="help-text">아직 이 프로젝트에 속한 대화가 없습니다.</p>';
+    
+    container.innerHTML = `
+        <div class="project-view-header">
+            <div>
+                <h3>${escapeHtml(project.name)}</h3>
+                <p class="project-meta">${escapeHtml(project.description || '설명이 없습니다.')}</p>
+            </div>
+            <div class="project-actions">
+                <button class="btn-secondary" id="project-manage-btn">프로젝트 관리</button>
+                <button class="btn-primary" id="project-new-chat">새 대화 만들기</button>
+            </div>
+        </div>
+        <div class="project-chats-list">
+            ${chatListHtml}
+        </div>
+    `;
+    
+    container.classList.remove('hidden');
+    container.classList.add('active');
+    
+    const manageBtn = document.getElementById('project-manage-btn');
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => {
+            renderProjectList();
+            openModal(elements.projectsModal);
+        });
+    }
+    
+    const newChatBtn = document.getElementById('project-new-chat');
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => createNewChat(projectId));
+    }
+    
+    container.querySelectorAll('[data-chat-id]').forEach(item => {
+        item.addEventListener('click', () => {
+            loadChat(item.dataset.chatId);
+        });
+    });
+}
+
+function attachChatToProject(chatId, projectId) {
+    if (!projectId || !APP_STATE.projects[projectId]) return;
+    const project = APP_STATE.projects[projectId];
+    project.chatIds = Array.isArray(project.chatIds) ? project.chatIds : [];
+    if (!project.chatIds.includes(chatId)) {
+        project.chatIds.push(chatId);
+    }
+    APP_STATE.chats[chatId].projectId = projectId;
+    persistProjects();
+    StorageManager.saveChats(APP_STATE.chats);
+    renderProjectSidebar();
+    renderProjectList();
+    if (APP_STATE.currentProjectId === projectId) {
+        renderProjectView();
+    }
+}
+
+// 라이브러리
+function addPromptToLibraryEntry(promptText, summary, service) {
+    const entry = {
+        id: `prompt_${Date.now()}`,
+        prompt: promptText,
+        summary,
+        service,
+        savedAt: Date.now()
+    };
+    
+    APP_STATE.promptLibrary.unshift(entry);
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.savePromptLibrary(APP_STATE.currentUser.email, APP_STATE.promptLibrary);
+    }
+}
+
+function renderPromptLibrary() {
+    if (!elements.libraryList) return;
+    
+    if (APP_STATE.promptLibrary.length === 0) {
+        elements.libraryList.innerHTML = '<p class="help-text">저장된 프롬프트가 없습니다.</p>';
+        return;
+    }
+    
+    elements.libraryList.innerHTML = '';
+    
+    APP_STATE.promptLibrary.forEach(entry => {
+        const card = document.createElement('div');
+        card.className = 'library-card';
+        card.innerHTML = `
+            <h4>${escapeHtml(entry.summary || '요약 없음')}</h4>
+            <p class="library-meta">${entry.service?.toUpperCase() || '서비스 미지정'} · ${new Date(entry.savedAt).toLocaleString()}</p>
+            <pre class="library-prompt">${escapeHtml(entry.prompt)}</pre>
+            <div class="library-actions">
+                <button class="btn-secondary" data-copy="${entry.id}">복사</button>
+                <button class="btn-secondary" data-edit="${entry.id}">수정 요청</button>
+            </div>
+        `;
+        card.querySelector('[data-copy]').addEventListener('click', () => {
+            navigator.clipboard.writeText(entry.prompt);
+            alert('프롬프트가 클립보드에 복사되었습니다.');
+        });
+        card.querySelector('[data-edit]').addEventListener('click', () => startLibraryEdit(entry));
+        elements.libraryList.appendChild(card);
+    });
+}
+
+function startLibraryEdit(entry) {
+    if (!elements.messageInput) return;
+    const prompt = entry.prompt || '';
+    elements.messageInput.value = `이 프롬프트를 개선해줘:\n${prompt}\n\n요청 사항: `;
+    elements.messageInput.focus();
+    autoResizeTextarea({ target: elements.messageInput });
+    if (elements.libraryModal) {
+        closeModal(elements.libraryModal);
+    }
+}
+
+// 탐색
+function renderPromptGallery() {
+    if (!elements.galleryList) return;
+    
+    const entries = APP_STATE.promptGallery || [];
+    if (entries.length === 0) {
+        elements.galleryList.innerHTML = '<p class="help-text">탐색할 프롬프트가 없습니다.</p>';
+        return;
+    }
+    
+    elements.galleryList.innerHTML = '';
+    
+    entries.forEach(entry => {
+        const card = document.createElement('div');
+        card.className = 'gallery-card';
+        card.innerHTML = `
+            <h4>${escapeHtml(entry.title)}</h4>
+            <p>${escapeHtml(entry.description)}</p>
+            <pre class="library-prompt">${escapeHtml(entry.prompt)}</pre>
+            <div class="gallery-tags">
+                ${entry.tags.map(tag => `<span class="gallery-tag">${escapeHtml(tag)}</span>`).join('')}
+            </div>
+        `;
+        elements.galleryList.appendChild(card);
+    });
+}
+
+// 메모리
+function handleMemorySubmit(e) {
+    e.preventDefault();
+    const text = elements.memoryInput.value.trim();
+    if (!text) return;
+    
+    addMemoryEntry({
+        text,
+        source: 'manual',
+        tags: ['manual']
+    });
+    
+    elements.memoryInput.value = '';
+    renderMemoryList();
+}
+
+function addMemoryEntry({ text, source = 'manual', tags = [] }) {
+    const entry = {
+        id: `memory_${Date.now()}`,
+        text,
+        source,
+        tags,
+        createdAt: Date.now()
+    };
+    
+    APP_STATE.memories.unshift(entry);
+    
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.saveMemories(APP_STATE.currentUser.email, APP_STATE.memories);
+    }
+}
+
+function renderMemoryList() {
+    if (!elements.memoryList) return;
+    
+    if (APP_STATE.memories.length === 0) {
+        elements.memoryList.innerHTML = '<p class="help-text">저장된 메모리가 없습니다.</p>';
+        return;
+    }
+    
+    elements.memoryList.innerHTML = '';
+    APP_STATE.memories.forEach(memory => {
+        const card = document.createElement('div');
+        card.className = 'memory-card';
+        card.innerHTML = `
+            <p>${escapeHtml(memory.text)}</p>
+            <div class="memory-meta">${new Date(memory.createdAt).toLocaleString()} · ${memory.source === 'conversation' ? '대화 기반' : memory.source === 'assistant' ? 'AI 자동' : '직접 추가'}</div>
+        `;
+        elements.memoryList.appendChild(card);
+    });
+}
+
+function maybeStoreMemoryFromMessage(message) {
+    const normalized = message.toLowerCase();
+    const keywords = ['기억', '메모', 'remember', '기억해', '기억해줘', '기억해줘', 'memo'];
+    if (keywords.some(keyword => normalized.includes(keyword))) {
+        addMemoryEntry({
+            text: message,
+            source: 'conversation',
+            tags: ['auto']
+        });
+        if (currentSettingsSection === 'memory' && elements.settingsModal?.classList.contains('active')) {
+            renderMemoryList();
+        }
+    }
+}
+
+async function handleRememberMemory(args) {
+    const note = (args.note || '').trim();
+    if (!note) {
+        return {
+            success: false,
+            message: '메모리에 저장할 문장이 없습니다.'
+        };
+    }
+    
+    const tags = Array.isArray(args.tags) ? args.tags : ['assistant'];
+    addMemoryEntry({
+        text: note,
+        source: 'assistant',
+        tags
+    });
+    renderMemoryList();
+    
+    return {
+        success: true,
+        message: '메모리가 저장되었습니다.'
+    };
 }
 
 function initializeSelectionAssistant() {
@@ -682,6 +1621,7 @@ function handleLogout() {
     APP_STATE.currentChatId = null;
     APP_STATE.conversationHistory = [];
     StorageManager.clearUser();
+    APP_STATE.currentProjectId = null;
     document.body.classList.add('app-loading');
     document.body.classList.remove('app-ready');
     if (elements.sidebar) {
@@ -832,7 +1772,7 @@ function toggleSidebar() {
 }
 
 // 새 채팅 생성
-function createNewChat() {
+function createNewChat(projectId = null) {
     const chatId = 'chat_' + Date.now();
     
     APP_STATE.currentChatId = chatId;
@@ -841,15 +1781,27 @@ function createNewChat() {
         title: '새 대화',
         messages: [],
         createdAt: Date.now(),
-        selectedService: 'chatgpt'
+        selectedService: 'chatgpt',
+        projectId: projectId || null
     };
     
     APP_STATE.conversationHistory = [];
     
     StorageManager.saveChats(APP_STATE.chats);
+    
+    if (projectId && APP_STATE.projects[projectId]) {
+        attachChatToProject(chatId, projectId);
+    }
+    
     renderChatHistory();
+    renderProjectSidebar();
     clearMessages();
-    showWelcomeScreen();
+    if (projectId && APP_STATE.projects[projectId]) {
+        loadChat(chatId);
+        return;
+    } else {
+        showWelcomeScreen();
+    }
     
     if (isMobileView()) {
         closeSidebarOnMobile();
@@ -863,6 +1815,10 @@ function loadChat(chatId) {
     
     APP_STATE.currentChatId = chatId;
     elements.aiServiceSelect.value = chat.selectedService || 'chatgpt';
+    
+    if (APP_STATE.currentProjectId) {
+        closeProjectView();
+    }
     
     if (isMobileView()) {
         closeSidebarOnMobile();
@@ -958,7 +1914,11 @@ function renderChatHistory() {
         if (chatId === APP_STATE.currentChatId) {
             item.classList.add('active');
         }
-        item.textContent = chat.title;
+        const project = chat.projectId ? APP_STATE.projects[chat.projectId] : null;
+        item.innerHTML = `
+            <span class="chat-title">${chat.title}</span>
+            ${project ? `<span class="chat-project-tag">${project.name}</span>` : ''}
+        `;
         item.addEventListener('click', () => loadChat(chatId));
         elements.chatHistory.appendChild(item);
     });
@@ -989,6 +1949,7 @@ async function sendMessage(userMessage) {
     // 사용자 메시지 추가
     appendMessage('user', userMessage);
     saveMessageToChat('user', userMessage);
+    maybeStoreMemoryFromMessage(userMessage);
     
     // 대화 제목 업데이트 (첫 메시지인 경우)
     const currentChat = APP_STATE.chats[APP_STATE.currentChatId];
@@ -1035,6 +1996,15 @@ async function sendMessage(userMessage) {
 
 // OpenAI API 호출
 async function callOpenAI(messages) {
+    const profileContext = buildUserProfileContext();
+    const memoryContext = buildMemoryContext();
+    const payloadMessages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...(profileContext ? [{ role: 'system', content: profileContext }] : []),
+        ...(memoryContext ? [{ role: 'system', content: memoryContext }] : []),
+        ...messages
+    ];
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -1043,10 +2013,7 @@ async function callOpenAI(messages) {
         },
         body: JSON.stringify({
             model: 'gpt-4-turbo-preview',
-            messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                ...messages
-            ],
+            messages: payloadMessages,
             tools: FUNCTIONS.map(func => ({
                 type: 'function',
                 function: func
@@ -1064,6 +2031,33 @@ async function callOpenAI(messages) {
     console.log('OpenAI Response:', data);
     
     return data.choices[0].message;
+}
+
+function buildUserProfileContext() {
+    const profile = APP_STATE.userProfile;
+    if (!profile || !profile.selections) return '';
+    
+    const summaries = ONBOARDING_QUESTIONS
+        .map(question => {
+            const selection = profile.selections[question.id];
+            if (!selection) return null;
+            return `${question.title}: ${selection.label}`;
+        })
+        .filter(Boolean);
+    
+    if (summaries.length === 0) return '';
+    
+    return `USER PREFERENCES:\n${summaries.map(line => `- ${line}`).join('\n')}\n항상 위 선호를 반영하여 프롬프트 설계와 응답 스타일을 조정하세요.`;
+}
+
+function buildMemoryContext() {
+    if (!Array.isArray(APP_STATE.memories) || APP_STATE.memories.length === 0) {
+        return '';
+    }
+    
+    const recent = APP_STATE.memories.slice(0, 5);
+    const lines = recent.map(memory => `- ${memory.text}`);
+    return `CONVERSATION MEMORY:\n${lines.join('\n')}\n위 항목은 사용자가 이전에 강조한 정보입니다. 필요할 때 자연스럽게 참고하세요.`;
 }
 
 // Function Calls 처리
@@ -1098,6 +2092,9 @@ async function handleFunctionCalls(responseMessage) {
             
         case 'request_survey':
             functionResult = await handleRequestSurvey(functionArgs);
+            break;
+        case 'remember_memory':
+            functionResult = await handleRememberMemory(functionArgs);
             break;
     }
     
@@ -1832,6 +2829,7 @@ function showFinalPrompt(promptText, summary, selectedService = null, shouldSave
     
     if (shouldSave) {
         saveMessageToChat('final_prompt', JSON.stringify({ prompt: promptText, summary, service }));
+        addPromptToLibraryEntry(promptText, summary, service);
     }
 }
 
@@ -1904,17 +2902,24 @@ function removeTypingIndicator(loadingId) {
 
 function clearMessages() {
     const welcome = elements.welcomeScreen;
+    const projectView = elements.projectView;
     elements.messagesContainer.innerHTML = '';
     if (welcome) {
         elements.messagesContainer.appendChild(welcome);
     }
+    if (projectView) {
+        elements.messagesContainer.appendChild(projectView);
+    }
 }
 
 function showWelcomeScreen() {
+    if (!elements.welcomeScreen) return;
+    if (APP_STATE.currentProjectId) return;
     elements.welcomeScreen.style.display = 'flex';
 }
 
 function hideWelcomeScreen() {
+    if (!elements.welcomeScreen) return;
     elements.welcomeScreen.style.display = 'none';
 }
 
