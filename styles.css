@@ -1483,18 +1483,36 @@ body {
     padding: 24px;
     border-top: 1px solid var(--border-color);
     background: var(--background);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.attachment-bar {
+    width: 100%;
+    max-width: 800px;
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 auto 12px;
+}
+
+.attachment-bar:not(.hidden) {
+    display: flex;
+    justify-content: flex-start;
 }
 
 .chat-form {
     max-width: 800px;
+    width: 100%;
     margin: 0 auto;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     gap: 12px;
     align-items: flex-end;
 }
 
 #message-input {
-    flex: 1;
     padding: 14px 18px;
     border: 1.5px solid var(--border-color);
     border-radius: 12px;
@@ -1535,6 +1553,188 @@ body {
 .btn-send:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.btn-attach {
+    width: 50px;
+    height: 50px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 20px;
+    transition: var(--transition);
+}
+
+.btn-attach:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.attachment-chip {
+    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--background);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.attachment-chip:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.attachment-chip:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.attachment-bar .attachment-chip {
+    background: var(--background-secondary);
+}
+
+.attachment-chip-label {
+    pointer-events: none;
+}
+
+.attachment-bar .attachment-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text-secondary);
+    margin-left: 2px;
+    transition: var(--transition);
+}
+
+.attachment-bar .attachment-remove:hover {
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--text-primary);
+}
+
+.attachment-bar .attachment-remove:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.message-attachments {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.message-attachments .attachment-chip {
+    background: var(--background);
+}
+
+.message-attachments .attachment-chip:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* 첨부 파일 뷰어 */
+.attachment-viewer {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1200;
+}
+
+.attachment-viewer-content {
+    width: min(960px, 100%);
+    max-height: 90vh;
+    background: var(--background);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.attachment-viewer-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.attachment-viewer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.attachment-viewer-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.attachment-viewer-body {
+    flex: 1;
+    background: var(--background-secondary);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    min-height: 320px;
+}
+
+.attachment-viewer-body img,
+.attachment-viewer-body iframe,
+.attachment-viewer-body embed {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.attachment-viewer-body iframe,
+.attachment-viewer-body embed {
+    border: none;
+}
+
+.attachment-text-preview {
+    width: 100%;
+    padding: 24px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    background: var(--background);
+    color: var(--text-primary);
+    overflow: auto;
+}
+
+.attachment-viewer-placeholder,
+.attachment-fallback {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    width: 100%;
+}
+
+.attachment-fallback a {
+    margin-top: 12px;
 }
 
 /* 모달 */
@@ -2017,6 +2217,7 @@ body {
     
     .input-container {
         padding: 16px;
+        align-items: stretch;
         position: sticky;
         bottom: 0;
         background: var(--background);
@@ -2025,9 +2226,12 @@ body {
         z-index: 120;
     }
 
+    .attachment-bar {
+        max-width: 100%;
+    }
+
     .chat-form {
-        flex-direction: row;
-        align-items: flex-end;
+        grid-template-columns: auto 1fr auto;
         gap: 10px;
     }
 
@@ -2087,6 +2291,18 @@ body {
     .settings-tab {
         flex: 1;
         text-align: center;
+    }
+
+    .attachment-viewer {
+        padding: 16px;
+    }
+
+    .attachment-viewer-content {
+        border-radius: 12px;
+    }
+
+    .attachment-viewer-body {
+        min-height: 60vh;
     }
 }
 
@@ -2261,4 +2477,7 @@ body {
 
 .label-mobile {
     display: none;
+}
+#message-input:focus {
+    outline: none;
 }
