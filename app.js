@@ -109,6 +109,7 @@ Use markdown tables when presenting quotes.`
 ];
 
 let currentSettingsSection = 'general';
+let chatContextTargetId = null;
 
 // OpenAI Function Definitions
 const FUNCTIONS = [
@@ -468,6 +469,9 @@ const elements = {
     galleryModal: document.getElementById('gallery-modal'),
     closeGallery: document.getElementById('close-gallery'),
     galleryList: document.getElementById('gallery-list'),
+    
+    // 컨텍스트 메뉴
+    chatContextMenu: document.getElementById('chat-context-menu'),
 
     // 온보딩
     onboardingModal: document.getElementById('onboarding-modal'),
@@ -650,10 +654,31 @@ function registerEventListeners() {
         });
     }
 
+    if (elements.chatContextMenu) {
+        elements.chatContextMenu.querySelectorAll('[data-chat-menu]').forEach(btn => {
+            btn.addEventListener('click', handleChatContextAction);
+        });
+    }
+
     document.addEventListener('click', (event) => {
-        if (!elements.projectMenu || !elements.projectMenuToggle) return;
-        if (elements.projectMenu.contains(event.target) || elements.projectMenuToggle.contains(event.target)) return;
-        closeProjectMenu();
+        if (elements.projectMenu && elements.projectMenuToggle) {
+            if (!elements.projectMenu.contains(event.target) && !elements.projectMenuToggle.contains(event.target)) {
+                closeProjectMenu();
+            }
+        }
+        if (elements.chatContextMenu && !elements.chatContextMenu.classList.contains('hidden')) {
+            if (!elements.chatContextMenu.contains(event.target)) {
+                closeChatContextMenu();
+            }
+        }
+    });
+    window.addEventListener('scroll', closeChatContextMenu, true);
+    window.addEventListener('resize', closeChatContextMenu);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeChatContextMenu();
+            closeProjectMenu();
+        }
     });
 
     window.addEventListener('resize', handleWindowResize);
@@ -779,6 +804,46 @@ function toggleProjectMenu() {
 function closeProjectMenu() {
     if (!elements.projectMenu) return;
     elements.projectMenu.classList.add('hidden');
+}
+
+function openChatContextMenu(event, chatId) {
+    if (!elements.chatContextMenu) return;
+    event.preventDefault();
+    chatContextTargetId = chatId;
+    const menu = elements.chatContextMenu;
+    menu.classList.remove('hidden');
+    
+    const menuWidth = menu.offsetWidth || 180;
+    const menuHeight = menu.offsetHeight || 90;
+    let left = event.clientX + window.scrollX;
+    let top = event.clientY + window.scrollY;
+    const maxLeft = window.scrollX + document.documentElement.clientWidth - menuWidth - 8;
+    const maxTop = window.scrollY + document.documentElement.clientHeight - menuHeight - 8;
+    left = Math.min(left, maxLeft);
+    top = Math.min(top, maxTop);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function closeChatContextMenu() {
+    if (!elements.chatContextMenu) return;
+    elements.chatContextMenu.classList.add('hidden');
+    chatContextTargetId = null;
+}
+
+function handleChatContextAction(event) {
+    const action = event.currentTarget.dataset.chatMenu;
+    if (!chatContextTargetId) {
+        closeChatContextMenu();
+        return;
+    }
+    
+    if (action === 'rename') {
+        renameChat(chatContextTargetId);
+    } else if (action === 'delete') {
+        deleteChat(chatContextTargetId);
+    }
+    closeChatContextMenu();
 }
 
 function setOnboardingSelection(questionId, value) {
@@ -1229,6 +1294,54 @@ function renderPromptGallery() {
     });
 }
 
+function renameChat(chatId) {
+    const chat = APP_STATE.chats[chatId];
+    if (!chat) return;
+    const newTitle = prompt('채팅 이름을 입력하세요', chat.title || '');
+    if (newTitle === null) return;
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    chat.title = trimmed;
+    StorageManager.saveChats(APP_STATE.chats);
+    renderChatHistory();
+    if (APP_STATE.currentProjectId) {
+        renderProjectView();
+    }
+}
+
+function deleteChat(chatId) {
+    const chat = APP_STATE.chats[chatId];
+    if (!chat) return;
+    if (!confirm('채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+    
+    const projectId = chat.projectId;
+    delete APP_STATE.chats[chatId];
+    StorageManager.saveChats(APP_STATE.chats);
+    
+    if (projectId && APP_STATE.projects[projectId]) {
+        APP_STATE.projects[projectId].chatIds = (APP_STATE.projects[projectId].chatIds || []).filter(id => id !== chatId);
+        persistProjects();
+    }
+    
+    if (APP_STATE.currentChatId === chatId) {
+        APP_STATE.currentChatId = null;
+        APP_STATE.conversationHistory = [];
+        clearMessages();
+        if (APP_STATE.currentProjectId) {
+            renderProjectView();
+        } else {
+            showWelcomeScreen();
+        }
+    }
+    
+    renderChatHistory();
+    renderProjectSidebar();
+    renderProjectList();
+    if (APP_STATE.currentProjectId) {
+        renderProjectView();
+    }
+}
+
 // 메모리
 function handleMemorySubmit(e) {
     e.preventDefault();
@@ -1261,6 +1374,14 @@ function addMemoryEntry({ text, source = 'manual', tags = [] }) {
     }
 }
 
+function deleteMemoryEntry(memoryId) {
+    APP_STATE.memories = APP_STATE.memories.filter(memory => memory.id !== memoryId);
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.saveMemories(APP_STATE.currentUser.email, APP_STATE.memories);
+    }
+    renderMemoryList();
+}
+
 function renderMemoryList() {
     if (!elements.memoryList) return;
     
@@ -1276,8 +1397,15 @@ function renderMemoryList() {
         card.innerHTML = `
             <p>${escapeHtml(memory.text)}</p>
             <div class="memory-meta">${new Date(memory.createdAt).toLocaleString()} · ${memory.source === 'conversation' ? '대화 기반' : memory.source === 'assistant' ? 'AI 자동' : '직접 추가'}</div>
+            <div class="memory-actions">
+                <button class="memory-delete-btn" data-memory-id="${memory.id}">삭제</button>
+            </div>
         `;
         elements.memoryList.appendChild(card);
+    });
+    
+    elements.memoryList.querySelectorAll('[data-memory-id]').forEach(btn => {
+        btn.addEventListener('click', () => deleteMemoryEntry(btn.dataset.memoryId));
     });
 }
 
@@ -1901,6 +2029,7 @@ function loadChat(chatId) {
 
 // 채팅 기록 렌더링
 function renderChatHistory() {
+    closeChatContextMenu();
     elements.chatHistory.innerHTML = '';
     
     const chatIds = Object.keys(APP_STATE.chats).sort((a, b) => {
@@ -1916,10 +2045,13 @@ function renderChatHistory() {
         }
         const project = chat.projectId ? APP_STATE.projects[chat.projectId] : null;
         item.innerHTML = `
-            <span class="chat-title">${chat.title}</span>
-            ${project ? `<span class="chat-project-tag">${project.name}</span>` : ''}
+            <div class="chat-title-wrapper">
+                <span class="chat-title">${escapeHtml(chat.title)}</span>
+                ${project ? `<span class="chat-project-tag">${escapeHtml(project.name)}</span>` : ''}
+            </div>
         `;
         item.addEventListener('click', () => loadChat(chatId));
+        item.addEventListener('contextmenu', (event) => openChatContextMenu(event, chatId));
         elements.chatHistory.appendChild(item);
     });
 }

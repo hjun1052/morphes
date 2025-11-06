@@ -92,10 +92,10 @@
                     </button>
                     
                     <div class="service-selector">
-                        <label for="ai-service">
-                            <span class="label-desktop">대상 AI 서비스</span>
-                            <span class="label-mobile">대상</span>
-                        </label>
+                                <label for="ai-service">
+                                    <span class="label-desktop">대상 AI 서비스</span>
+                                    <span class="label-mobile">대상</span>
+                                </label>
                         <select id="ai-service" class="service-dropdown">
                             <option value="chatgpt">ChatGPT</option>
                             <option value="claude">Claude</option>
@@ -383,6 +383,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <div class="context-menu hidden" id="chat-context-menu">
+        <button type="button" data-chat-menu="rename">대화 이름 수정</button>
+        <button type="button" data-chat-menu="delete">대화 삭제</button>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
