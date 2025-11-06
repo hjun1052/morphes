@@ -11,8 +11,18 @@ const APP_STATE = {
     projects: {},
     promptLibrary: [],
     promptGallery: [],
-    currentProjectId: null
+    currentProjectId: null,
+    currentAttachments: []
 };
+
+const TEXT_PREVIEW_LIMIT = 4000;
+const TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
+const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|bmp|webp|svg)$/i;
+const TEXT_EXT_REGEX = /\.(txt|md|markdown|csv|json|log|xml|yaml|yml)$/i;
+const PDF_EXT_REGEX = /\.pdf$/i;
+const ATTACHMENT_STORAGE_CHAR_LIMIT = 350000; // 약 350KB
+let storageWarningShown = false;
+let attachmentTrimWarningShown = false;
 
 const SELECTION_ASSIST = {
     tooltip: null,
@@ -315,7 +325,13 @@ if (window.marked) {
 // 로컬스토리지 관리
 class StorageManager {
     static save(key, data) {
-        localStorage.setItem(key, JSON.stringify(data));
+        try {
+            localStorage.setItem(key, JSON.stringify(data));
+            return true;
+        } catch (error) {
+            console.error('Storage save failed:', error);
+            return false;
+        }
     }
 
     static load(key) {
@@ -328,7 +344,17 @@ class StorageManager {
     }
 
     static saveChats(chats) {
-        this.save('promptcraft_chats', chats);
+        const prepared = this.prepareChatsForStorage(chats);
+        if (this.save('promptcraft_chats', prepared)) {
+            return true;
+        }
+        const fallback = this.prepareChatsForStorage(chats, { stripDataUrl: true });
+        if (this.save('promptcraft_chats', fallback)) {
+            this.notifyAttachmentTrimmed();
+            return true;
+        }
+        this.notifyStorageError();
+        return false;
     }
 
     static loadChats() {
@@ -407,6 +433,110 @@ class StorageManager {
     static loadPromptGallery() {
         return this.load('promptcraft_prompt_gallery');
     }
+
+    static prepareChatsForStorage(chats, options = {}) {
+        if (!chats || typeof chats !== 'object') return {};
+        const prepared = {};
+        Object.keys(chats).forEach(chatId => {
+            const chat = chats[chatId];
+            if (!chat || typeof chat !== 'object') return;
+            prepared[chatId] = {
+                ...chat,
+                messages: Array.isArray(chat.messages)
+                    ? chat.messages.map(message => ({
+                        ...message,
+                        attachments: sanitizeAttachmentsForStorage(message.attachments, options)
+                    }))
+                    : []
+            };
+        });
+        return prepared;
+    }
+
+    static notifyAttachmentTrimmed() {
+        if (attachmentTrimWarningShown) return;
+        attachmentTrimWarningShown = true;
+        alert('저장 공간 한계로 일부 첨부 파일의 원본 데이터는 현재 세션에서만 유지됩니다.');
+    }
+
+    static notifyStorageError() {
+        if (storageWarningShown) return;
+        storageWarningShown = true;
+        alert('브라우저 저장 공간이 부족하여 채팅 기록을 완전히 저장하지 못했습니다. 불필요한 채팅을 삭제해주세요.');
+    }
+}
+
+function sanitizeAttachmentsForStorage(attachments, options = {}) {
+    if (!Array.isArray(attachments)) return [];
+    const { stripDataUrl = false } = options;
+    return attachments.map(file => sanitizeAttachmentForStorage(file, { stripDataUrl }));
+}
+
+function sanitizeAttachmentForStorage(file = {}, options = {}) {
+    const sanitized = {
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        type: file.type
+    };
+    if (file.textPreview) {
+        sanitized.textPreview = file.textPreview;
+    }
+    const hasData = typeof file.dataUrl === 'string' && file.dataUrl.length > 0;
+    const withinLimit = hasData && file.dataUrl.length <= ATTACHMENT_STORAGE_CHAR_LIMIT;
+    if (!options.stripDataUrl && withinLimit) {
+        sanitized.dataUrl = file.dataUrl;
+    } else if (hasData) {
+        sanitized.sessionOnly = true;
+    }
+    return sanitized;
+}
+
+function normalizeConversationHistory(history = []) {
+    if (!Array.isArray(history)) return [];
+    const toolResponses = new Set();
+    history.forEach(msg => {
+        if (msg && msg.role === 'tool' && msg.tool_call_id) {
+            toolResponses.add(msg.tool_call_id);
+        }
+    });
+    return history.filter(msg => {
+        if (!msg) return false;
+        if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+            return true;
+        }
+        if (msg.role === 'tool') {
+            return Boolean(msg.tool_call_id);
+        }
+        return true;
+    });
+}
+
+function ensureValidToolMessageSequence(messages = []) {
+    const result = [];
+    let pendingToolIds = new Set();
+    messages.forEach(message => {
+        if (!message) return;
+        if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+            pendingToolIds = new Set(
+                message.tool_calls
+                    .map(call => call?.id)
+                    .filter(Boolean)
+            );
+            result.push(message);
+            return;
+        }
+        if (message.role === 'tool') {
+            if (pendingToolIds.has(message.tool_call_id)) {
+                result.push(message);
+                pendingToolIds.delete(message.tool_call_id);
+            }
+            return;
+        }
+        pendingToolIds = new Set();
+        result.push(message);
+    });
+    return result;
 }
 
 // DOM 요소
@@ -434,6 +564,13 @@ const elements = {
     chatForm: document.getElementById('chat-form'),
     messageInput: document.getElementById('message-input'),
     sendBtn: document.getElementById('send-btn'),
+    attachmentInput: document.getElementById('chat-attachment'),
+    attachmentBar: document.getElementById('attachment-bar'),
+    attachmentViewer: document.getElementById('attachment-viewer'),
+    attachmentViewerBody: document.getElementById('attachment-viewer-body'),
+    attachmentViewerName: document.getElementById('attachment-viewer-name'),
+    attachmentViewerMeta: document.getElementById('attachment-viewer-meta'),
+    attachmentViewerClose: document.getElementById('attachment-viewer-close'),
     aiServiceSelect: document.getElementById('ai-service'),
     
     // 모달
@@ -586,6 +723,15 @@ function registerEventListeners() {
         elements.messageInput.addEventListener('input', autoResizeTextarea);
         elements.messageInput.addEventListener('keydown', handleTextareaKeydown);
     }
+    if (elements.attachmentInput) {
+        elements.attachmentInput.addEventListener('change', handleAttachmentChange);
+    }
+    if (elements.attachmentBar) {
+        elements.attachmentBar.addEventListener('click', handleAttachmentPreviewClick);
+    }
+    if (elements.messagesContainer) {
+        elements.messagesContainer.addEventListener('click', handleAttachmentClick);
+    }
 
     registerPromptStarters();
 
@@ -644,6 +790,17 @@ function registerEventListeners() {
         elements.closeGallery.addEventListener('click', () => closeModal(elements.galleryModal));
     }
 
+    if (elements.attachmentViewerClose) {
+        elements.attachmentViewerClose.addEventListener('click', closeAttachmentViewer);
+    }
+    if (elements.attachmentViewer) {
+        elements.attachmentViewer.addEventListener('click', (event) => {
+            if (event.target === elements.attachmentViewer) {
+                closeAttachmentViewer();
+            }
+        });
+    }
+
     if (elements.memoryForm) {
         elements.memoryForm.addEventListener('submit', handleMemorySubmit);
     }
@@ -678,6 +835,7 @@ function registerEventListeners() {
         if (event.key === 'Escape') {
             closeChatContextMenu();
             closeProjectMenu();
+            closeAttachmentViewer();
         }
     });
 
@@ -806,6 +964,8 @@ function closeProjectMenu() {
     elements.projectMenu.classList.add('hidden');
 }
 
+// attachment helpers inserted later
+
 function openChatContextMenu(event, chatId) {
     if (!elements.chatContextMenu) return;
     event.preventDefault();
@@ -844,6 +1004,361 @@ function handleChatContextAction(event) {
         deleteChat(chatContextTargetId);
     }
     closeChatContextMenu();
+}
+
+async function handleAttachmentChange(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+        clearAttachmentPreview();
+        return;
+    }
+    
+    try {
+        const attachments = await Promise.all(files.map(file => readFileAsAttachment(file)));
+        APP_STATE.currentAttachments = attachments;
+        renderAttachmentPreview();
+    } catch (error) {
+        console.error('Attachment read error:', error);
+        alert('파일을 읽는 중 문제가 발생했습니다.');
+        clearAttachmentPreview();
+    }
+}
+
+function readFileAsAttachment(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const attachment = {
+                id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                dataUrl: reader.result
+                };
+                if (shouldExtractTextPreview(file)) {
+                    try {
+                        const rawText = await file.text();
+                        attachment.textPreview = truncateTextPreview(rawText);
+                    } catch (error) {
+                        console.warn('텍스트 미리보기를 불러오지 못했습니다.', error);
+                    }
+                }
+                resolve(attachment);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+}
+
+function shouldExtractTextPreview(file) {
+    if (!file) return false;
+    if (!isTextAttachment(file)) return false;
+    if (typeof file.size === 'number' && file.size > TEXT_PREVIEW_MAX_BYTES) {
+        return false;
+    }
+    return true;
+}
+
+function truncateTextPreview(text = '') {
+    if (!text) return '';
+    if (text.length <= TEXT_PREVIEW_LIMIT) return text;
+    return `${text.slice(0, TEXT_PREVIEW_LIMIT)}\n… (생략)`;
+}
+
+function renderAttachmentPreview() {
+    if (!elements.attachmentBar) return;
+    if (!APP_STATE.currentAttachments || APP_STATE.currentAttachments.length === 0) {
+        elements.attachmentBar.classList.add('hidden');
+        elements.attachmentBar.innerHTML = '';
+        return;
+    }
+    
+    const chips = APP_STATE.currentAttachments.map((file, index) => {
+        const sizeLabel = typeof file.size === 'number' ? ` (${formatFileSize(file.size)})` : '';
+        const icon = getAttachmentIcon(file);
+        return `<button type="button" class="attachment-chip" data-attachment-index="${index}"><span class="attachment-chip-label">${icon} ${escapeHtml(file.name || '첨부 파일')}${sizeLabel}</span><span class="attachment-remove" data-remove-index="${index}" aria-label="첨부 삭제" role="button">×</span></button>`;
+    }).join('');
+    
+    elements.attachmentBar.innerHTML = chips;
+    elements.attachmentBar.classList.remove('hidden');
+}
+
+function handleAttachmentPreviewClick(event) {
+    const removeTarget = event.target.closest('.attachment-remove');
+    if (removeTarget) {
+        event.stopPropagation();
+        const removeIndex = Number(removeTarget.dataset.removeIndex);
+        if (!Number.isNaN(removeIndex)) {
+            removeAttachment(removeIndex);
+        }
+        return;
+    }
+    
+    const target = event.target.closest('[data-attachment-index]');
+    if (!target) return;
+    const index = Number(target.dataset.attachmentIndex);
+    if (Number.isNaN(index)) return;
+    const attachment = APP_STATE.currentAttachments[index];
+    if (attachment) {
+        openAttachment(attachment);
+    }
+}
+
+function removeAttachment(index) {
+    if (!Array.isArray(APP_STATE.currentAttachments)) return;
+    if (index < 0 || index >= APP_STATE.currentAttachments.length) return;
+    APP_STATE.currentAttachments.splice(index, 1);
+    renderAttachmentPreview();
+    if (elements.attachmentInput && APP_STATE.currentAttachments.length === 0) {
+        elements.attachmentInput.value = '';
+    }
+}
+
+function getAttachmentIcon(file = {}) {
+    if (isImageAttachment(file)) return '🖼';
+    if (isPdfAttachment(file)) return '📕';
+    if (isTextAttachment(file)) return '📄';
+    return '📎';
+}
+
+function isImageAttachment(file = {}) {
+    const type = (file.type || '').toLowerCase();
+    if (type.startsWith('image/')) return true;
+    const name = (file.name || '').toLowerCase();
+    return IMAGE_EXT_REGEX.test(name);
+}
+
+function isPdfAttachment(file = {}) {
+    const type = (file.type || '').toLowerCase();
+    if (type === 'application/pdf') return true;
+    const name = (file.name || '').toLowerCase();
+    return PDF_EXT_REGEX.test(name);
+}
+
+function isTextAttachment(file = {}) {
+    const type = (file.type || '').toLowerCase();
+    if (type.startsWith('text/')) return true;
+    if (['application/json', 'application/xml', 'application/javascript', 'application/yaml', 'application/x-yaml'].includes(type)) {
+        return true;
+    }
+    const name = (file.name || '').toLowerCase();
+    return TEXT_EXT_REGEX.test(name);
+}
+
+function clearAttachmentPreview() {
+    APP_STATE.currentAttachments = [];
+    if (elements.attachmentBar) {
+        elements.attachmentBar.innerHTML = '';
+        elements.attachmentBar.classList.add('hidden');
+    }
+    if (elements.attachmentInput) {
+        elements.attachmentInput.value = '';
+    }
+}
+
+function handleAttachmentClick(event) {
+    const target = event.target.closest('[data-attachment]');
+    if (!target) return;
+    
+    try {
+        const decoded = decodeURIComponent(target.dataset.attachment);
+        const attachment = JSON.parse(decoded);
+        openAttachment(attachment);
+    } catch (error) {
+        console.error('Failed to open attachment:', error);
+        alert('첨부 파일을 열 수 없습니다.');
+    }
+}
+
+function openAttachment(attachment) {
+    if (!attachment) return;
+    if (!elements.attachmentViewer || !elements.attachmentViewerBody || !elements.attachmentViewerName || !elements.attachmentViewerMeta) {
+        openAttachmentInNewTab(attachment);
+        return;
+    }
+
+    const meta = [];
+    if (attachment.type) {
+        meta.push(attachment.type);
+    }
+    if (typeof attachment.size === 'number') {
+        meta.push(formatFileSize(attachment.size));
+    }
+
+    elements.attachmentViewerName.textContent = attachment.name || '첨부 파일';
+    elements.attachmentViewerMeta.textContent = meta.join(' · ');
+
+    const previewMarkup = createAttachmentPreviewMarkup(attachment);
+    if (!previewMarkup) {
+        openAttachmentInNewTab(attachment);
+        return;
+    }
+
+    elements.attachmentViewerBody.innerHTML = previewMarkup;
+    elements.attachmentViewer.classList.remove('hidden');
+}
+
+function closeAttachmentViewer() {
+    if (!elements.attachmentViewer) return;
+    elements.attachmentViewer.classList.add('hidden');
+    if (elements.attachmentViewerBody) {
+        elements.attachmentViewerBody.innerHTML = '<p class="attachment-viewer-placeholder">첨부 파일을 선택하면 미리보기가 여기 표시됩니다.</p>';
+    }
+}
+
+function openAttachmentInNewTab(attachment) {
+    if (!attachment?.dataUrl) {
+        alert('첨부 파일 데이터를 찾을 수 없습니다.');
+        return;
+    }
+    const popup = window.open(attachment.dataUrl, '_blank');
+    if (!popup) {
+        alert('팝업 차단을 해제해주세요.');
+    }
+}
+
+function createAttachmentPreviewMarkup(attachment) {
+    if (!attachment) return '';
+    if (isImageAttachment(attachment) && attachment.dataUrl) {
+        const alt = escapeHtml(attachment.name || '이미지 첨부');
+        return `<img src="${attachment.dataUrl}" alt="${alt}">`;
+    }
+    if (isPdfAttachment(attachment) && attachment.dataUrl) {
+        return `<iframe src="${attachment.dataUrl}" title="PDF 미리보기"></iframe>`;
+    }
+    if (isTextAttachment(attachment)) {
+        const text = getAttachmentTextPreview(attachment);
+        if (text) {
+            return `<pre class="attachment-text-preview">${escapeHtml(text)}</pre>`;
+        }
+        if (!attachment.dataUrl) {
+            return '<div class="attachment-fallback">텍스트 미리보기를 불러오지 못했습니다.</div>';
+        }
+        const decoded = decodeTextFromDataUrl(attachment.dataUrl);
+        if (decoded) {
+            return `<pre class="attachment-text-preview">${escapeHtml(truncateTextPreview(decoded))}</pre>`;
+        }
+        return '<div class="attachment-fallback">텍스트 미리보기를 불러오지 못했습니다.</div>';
+    }
+    if (attachment.dataUrl) {
+        return `
+            <div class="attachment-fallback">
+                <p>이 파일 형식은 브라우저 미리보기를 지원하지 않습니다.</p>
+                <a class="btn-secondary" href="${attachment.dataUrl}" target="_blank" rel="noopener noreferrer">새 창으로 열기</a>
+            </div>
+        `;
+    }
+    if (attachment.sessionOnly) {
+        return '<div class="attachment-fallback">저장 공간 제한 때문에 이 첨부 파일의 원본 데이터는 세션 종료 후 복구할 수 없습니다. 필요하면 다시 업로드해주세요.</div>';
+    }
+    return '<div class="attachment-fallback">파일 데이터를 찾을 수 없습니다.</div>';
+}
+
+function getAttachmentTextPreview(attachment = {}) {
+    if (attachment.textPreview) return attachment.textPreview;
+    if (!attachment.dataUrl) return '';
+    const decoded = decodeTextFromDataUrl(attachment.dataUrl);
+    if (!decoded) return '';
+    return truncateTextPreview(decoded);
+}
+
+function decodeTextFromDataUrl(dataUrl) {
+    try {
+        if (!dataUrl) return '';
+        const commaIndex = dataUrl.indexOf(',');
+        if (commaIndex === -1) return '';
+        const base64 = dataUrl.slice(commaIndex + 1);
+        const binary = atob(base64);
+        if (typeof TextDecoder === 'undefined') {
+            try {
+                return decodeURIComponent(escape(binary));
+            } catch (error) {
+                console.error('Failed to decode text attachment (legacy fallback):', error);
+                return binary;
+            }
+        }
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        const decoder = new TextDecoder();
+        return decoder.decode(bytes);
+    } catch (error) {
+        console.error('Failed to decode text attachment:', error);
+        return '';
+    }
+}
+
+function buildAttachmentSummary(attachment = {}) {
+    if (!attachment) return '';
+    const name = attachment.name || '첨부 파일';
+    const type = attachment.type || '알 수 없는 형식';
+    const sizeLabel = typeof attachment.size === 'number' ? `, ${formatFileSize(attachment.size)}` : '';
+    const header = `${name} (${type}${sizeLabel})`;
+    
+    if (isTextAttachment(attachment)) {
+        const preview = getAttachmentTextPreview(attachment);
+        if (preview) {
+            return `텍스트 첨부: ${header}\n내용 미리보기:\n${preview}`;
+        }
+        return `텍스트 첨부: ${header}\n내용을 불러오지 못했습니다.`;
+    }
+    
+    if (isPdfAttachment(attachment)) {
+        return `PDF 첨부: ${header}\n현재 PDF 원문을 추출할 수 없어 파일 정보만 전달합니다.`;
+    }
+    
+    return `파일 첨부: ${header}\n이 형식은 직접 열 수 없어 메타데이터만 공유합니다.`;
+}
+
+function buildUserMessageContentParts(text, attachments = []) {
+    const parts = [];
+    const baseText = typeof text === 'string' ? text.trim() : '';
+    if (baseText) {
+        parts.push({
+            type: 'text',
+            text: baseText
+        });
+    }
+    
+    (attachments || []).forEach(attachment => {
+        const part = convertAttachmentToContentPart(attachment);
+        if (part) {
+            parts.push(part);
+        }
+    });
+    
+    if (parts.length === 0) {
+        parts.push({
+            type: 'text',
+            text: '사용자가 텍스트 없이 첨부 파일만 전송했습니다.'
+        });
+    }
+    
+    return parts;
+}
+
+function convertAttachmentToContentPart(attachment = {}) {
+    if (isImageAttachment(attachment) && attachment.dataUrl) {
+        return {
+            type: 'image_url',
+            image_url: {
+                url: attachment.dataUrl
+            }
+        };
+    }
+    
+    const summary = buildAttachmentSummary(attachment);
+    if (!summary) return null;
+    
+    return {
+        type: 'text',
+        text: summary
+    };
 }
 
 function setOnboardingSelection(questionId, value) {
@@ -1953,12 +2468,18 @@ function loadChat(chatId) {
     }
     
     // 대화 히스토리 복원
-    APP_STATE.conversationHistory = chat.messages
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => ({
-            role: msg.role,
-            content: msg.content
-        }));
+    const historyRoles = new Set(['user', 'assistant', 'tool']);
+    APP_STATE.conversationHistory = normalizeConversationHistory(
+        (chat.messages || [])
+            .filter(msg => msg && historyRoles.has(msg.role))
+            .map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
+                tool_call_id: msg.tool_call_id,
+                tool_calls: msg.tool_calls
+            }))
+    );
     
     clearMessages();
     if (chat.messages.length === 0) {
@@ -1971,7 +2492,12 @@ function loadChat(chatId) {
         switch (msg.role) {
             case 'user':
             case 'assistant':
-                appendMessage(msg.role, msg.content, false);
+                if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0 && (!msg.content || msg.content.length === 0)) {
+                    break;
+                }
+                appendMessage(msg.role, msg.content, false, msg.attachments || []);
+                break;
+            case 'tool':
                 break;
             case 'prompt_update':
                 appendPromptUpdate(msg.content, false);
@@ -2019,7 +2545,7 @@ function loadChat(chatId) {
                 }
                 break;
             default:
-                appendMessage('assistant', msg.content, false);
+                appendMessage('assistant', msg.content, false, msg.attachments || []);
                 break;
         }
     });
@@ -2061,7 +2587,8 @@ function handleSendMessage(e) {
     e.preventDefault();
     
     const message = elements.messageInput.value.trim();
-    if (!message) return;
+    const hasAttachment = APP_STATE.currentAttachments.length > 0;
+    if (!message && !hasAttachment) return;
     
     if (!APP_STATE.apiKey) {
         alert('OpenAI API 키를 먼저 설정해주세요.');
@@ -2069,18 +2596,21 @@ function handleSendMessage(e) {
         return;
     }
     
+    const attachments = APP_STATE.currentAttachments.map(file => ({ ...file }));
+    
     elements.messageInput.value = '';
     autoResizeTextarea({ target: elements.messageInput });
     
     hideWelcomeScreen();
-    sendMessage(message);
+    sendMessage(message, attachments);
+    clearAttachmentPreview();
 }
 
 // 메시지 전송
-async function sendMessage(userMessage) {
+async function sendMessage(userMessage, attachments = []) {
     // 사용자 메시지 추가
-    appendMessage('user', userMessage);
-    saveMessageToChat('user', userMessage);
+    appendMessage('user', userMessage, true, attachments);
+    saveMessageToChat('user', userMessage, attachments);
     maybeStoreMemoryFromMessage(userMessage);
     
     // 대화 제목 업데이트 (첫 메시지인 경우)
@@ -2096,7 +2626,8 @@ async function sendMessage(userMessage) {
     // 대화 히스토리에 추가
     APP_STATE.conversationHistory.push({
         role: 'user',
-        content: userMessage
+        content: userMessage,
+        attachments
     });
     
     try {
@@ -2115,7 +2646,8 @@ async function sendMessage(userMessage) {
             
             APP_STATE.conversationHistory.push({
                 role: 'assistant',
-                content: response.content
+                content: response.content,
+                attachments: []
             });
         }
         
@@ -2126,8 +2658,45 @@ async function sendMessage(userMessage) {
     }
 }
 
+function serializeMessageForApi(message) {
+    if (!message) return null;
+    const serialized = {
+        role: message.role
+    };
+    
+    if (message.role === 'user') {
+        serialized.content = buildUserMessageContentParts(message.content, message.attachments || []);
+        return serialized;
+    }
+    
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
+        serialized.tool_calls = message.tool_calls;
+    }
+    
+    if (message.role === 'tool' && message.tool_call_id) {
+        serialized.tool_call_id = message.tool_call_id;
+    }
+    
+    if (Array.isArray(message.content)) {
+        serialized.content = message.content;
+    } else if (typeof message.content === 'string') {
+        serialized.content = message.content;
+    } else if (message.content == null) {
+        serialized.content = '';
+    } else {
+        serialized.content = String(message.content);
+    }
+    
+    return serialized;
+}
+
 // OpenAI API 호출
 async function callOpenAI(messages) {
+    const normalizedHistory = normalizeConversationHistory(messages);
+    if (normalizedHistory !== messages) {
+        messages = normalizedHistory;
+        APP_STATE.conversationHistory = normalizedHistory;
+    }
     const profileContext = buildUserProfileContext();
     const memoryContext = buildMemoryContext();
     const payloadMessages = [
@@ -2136,6 +2705,10 @@ async function callOpenAI(messages) {
         ...(memoryContext ? [{ role: 'system', content: memoryContext }] : []),
         ...messages
     ];
+    const apiMessages = payloadMessages
+        .map(serializeMessageForApi)
+        .filter(Boolean);
+    const orderedMessages = ensureValidToolMessageSequence(apiMessages);
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -2144,8 +2717,8 @@ async function callOpenAI(messages) {
             'Authorization': `Bearer ${APP_STATE.apiKey}`
         },
         body: JSON.stringify({
-            model: 'gpt-4-turbo-preview',
-            messages: payloadMessages,
+            model: 'gpt-4o-mini',
+            messages: orderedMessages,
             tools: FUNCTIONS.map(func => ({
                 type: 'function',
                 function: func
@@ -2194,48 +2767,69 @@ function buildMemoryContext() {
 
 // Function Calls 처리
 async function handleFunctionCalls(responseMessage) {
-    const toolCall = responseMessage.tool_calls[0];
-    const functionName = toolCall.function.name;
-    const functionArgs = JSON.parse(toolCall.function.arguments);
-    
-    console.log('Function Call:', functionName, functionArgs);
+    const toolCalls = Array.isArray(responseMessage.tool_calls) ? responseMessage.tool_calls : [];
+    if (toolCalls.length === 0) return;
     
     // Function call을 대화 히스토리에 추가
-    APP_STATE.conversationHistory.push({
+    const assistantToolMessage = {
         role: 'assistant',
-        content: null,
+        content: responseMessage.content || '',
+        tool_calls: responseMessage.tool_calls,
+        attachments: []
+    };
+    APP_STATE.conversationHistory.push(assistantToolMessage);
+    saveMessageToChat('assistant', assistantToolMessage.content, [], {
         tool_calls: responseMessage.tool_calls
     });
     
-    let functionResult = null;
-    
-    switch (functionName) {
-        case 'suggest_prompt_options':
-            functionResult = await handleSuggestPromptOptions(functionArgs);
-            break;
-            
-        case 'update_prompt':
-            functionResult = await handleUpdatePrompt(functionArgs);
-            break;
-            
-        case 'finalize_prompt':
-            functionResult = await handleFinalizePrompt(functionArgs);
-            break;
-            
-        case 'request_survey':
-            functionResult = await handleRequestSurvey(functionArgs);
-            break;
-        case 'remember_memory':
-            functionResult = await handleRememberMemory(functionArgs);
-            break;
+    for (const toolCall of toolCalls) {
+        if (!toolCall?.function?.name) continue;
+        const functionName = toolCall.function.name;
+        let functionArgs = {};
+        try {
+            functionArgs = toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : {};
+        } catch (error) {
+            console.error('Failed to parse function arguments:', error);
+        }
+        
+        console.log('Function Call:', functionName, functionArgs);
+        let functionResult = null;
+        
+        switch (functionName) {
+            case 'suggest_prompt_options':
+                functionResult = await handleSuggestPromptOptions(functionArgs);
+                break;
+                
+            case 'update_prompt':
+                functionResult = await handleUpdatePrompt(functionArgs);
+                break;
+                
+            case 'finalize_prompt':
+                functionResult = await handleFinalizePrompt(functionArgs);
+                break;
+                
+            case 'request_survey':
+                functionResult = await handleRequestSurvey(functionArgs);
+                break;
+            case 'remember_memory':
+                functionResult = await handleRememberMemory(functionArgs);
+                break;
+            default:
+                console.warn('Unknown function call:', functionName);
+                break;
+        }
+        
+        const toolContent = functionResult === undefined ? '' : JSON.stringify(functionResult);
+        const toolMessage = {
+            role: 'tool',
+            content: toolContent,
+            tool_call_id: toolCall.id
+        };
+        APP_STATE.conversationHistory.push(toolMessage);
+        saveMessageToChat('tool', toolContent, [], {
+            tool_call_id: toolCall.id
+        });
     }
-    
-    // Function 결과를 대화 히스토리에 추가
-    APP_STATE.conversationHistory.push({
-        role: 'tool',
-        content: JSON.stringify(functionResult),
-        tool_call_id: toolCall.id
-    });
     
     // Function 결과를 바탕으로 다시 API 호출
     const followUpResponse = await callOpenAI(APP_STATE.conversationHistory);
@@ -2246,7 +2840,8 @@ async function handleFunctionCalls(responseMessage) {
         
         APP_STATE.conversationHistory.push({
             role: 'assistant',
-            content: followUpResponse.content
+            content: followUpResponse.content,
+            attachments: []
         });
     }
 }
@@ -2966,7 +3561,7 @@ function showFinalPrompt(promptText, summary, selectedService = null, shouldSave
 }
 
 // UI 헬퍼 함수
-function appendMessage(role, content, shouldSave = true) {
+function appendMessage(role, content, shouldSave = true, attachments = []) {
     hideWelcomeScreen();
     
     const messageDiv = document.createElement('div');
@@ -2981,6 +3576,7 @@ function appendMessage(role, content, shouldSave = true) {
                     <span>나</span>
                 </div>
                 <div class="message-text markdown-body">${formattedContent}</div>
+                ${renderAttachments(attachments)}
             </div>
         `;
     } else {
@@ -2991,12 +3587,26 @@ function appendMessage(role, content, shouldSave = true) {
                     <span>MORPHES</span>
                 </div>
                 <div class="message-text markdown-body">${formattedContent}</div>
+                ${renderAttachments(attachments)}
             </div>
         `;
     }
     
     elements.messagesContainer.appendChild(messageDiv);
     scrollToBottom();
+}
+
+function renderAttachments(attachments = []) {
+    if (!attachments || attachments.length === 0) return '';
+    
+    const items = attachments.map(file => {
+        const sizeLabel = typeof file.size === 'number' ? ` (${formatFileSize(file.size)})` : '';
+        const icon = getAttachmentIcon(file);
+        const encoded = encodeURIComponent(JSON.stringify(file));
+        return `<button type="button" class="attachment-chip" data-attachment="${encoded}">${icon} ${escapeHtml(file.name || '첨부 파일')}${sizeLabel}</button>`;
+    }).join('');
+    
+    return `<div class="message-attachments">${items}</div>`;
 }
 
 function showTypingIndicator() {
@@ -3093,7 +3703,7 @@ function escapeHtml(text) {
 }
 
 // 채팅에 메시지 저장
-function saveMessageToChat(role, content) {
+function saveMessageToChat(role, content, attachments = [], metadata = {}) {
     if (!APP_STATE.currentChatId) return null;
     
     const chat = APP_STATE.chats[APP_STATE.currentChatId];
@@ -3102,8 +3712,18 @@ function saveMessageToChat(role, content) {
     const messageRecord = {
         role,
         content,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        attachments
     };
+    
+    if (metadata && typeof metadata === 'object') {
+        Object.keys(metadata).forEach(key => {
+            const value = metadata[key];
+            if (value !== undefined) {
+                messageRecord[key] = value;
+            }
+        });
+    }
     
     chat.messages.push(messageRecord);
     

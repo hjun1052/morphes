@@ -92,10 +92,10 @@
                     </button>
                     
                     <div class="service-selector">
-                                <label for="ai-service">
-                                    <span class="label-desktop">대상 AI 서비스</span>
-                                    <span class="label-mobile">대상</span>
-                                </label>
+                        <label for="ai-service">
+                            <span class="label-desktop">대상 AI 서비스</span>
+                            <span class="label-mobile">대상</span>
+                        </label>
                         <select id="ai-service" class="service-dropdown">
                             <option value="chatgpt">ChatGPT</option>
                             <option value="claude">Claude</option>
@@ -149,7 +149,12 @@
 
                 <!-- 입력 영역 -->
                 <div class="input-container">
+                    <div class="attachment-bar hidden" id="attachment-bar"></div>
                     <form id="chat-form" class="chat-form">
+                        <label class="btn-attach" for="chat-attachment" title="파일 추가">
+                            +
+                            <input type="file" id="chat-attachment" multiple hidden>
+                        </label>
                         <textarea 
                             id="message-input" 
                             placeholder="어떤 프롬프트를 만들고 싶으신가요? (Shift + Enter로 줄바꿈)"
@@ -378,6 +383,26 @@
                 </button>
             </div>
             <div class="modal-body gallery-body" id="gallery-list"></div>
+        </div>
+    </div>
+
+    <!-- 첨부 파일 뷰어 -->
+    <div class="attachment-viewer hidden" id="attachment-viewer">
+        <div class="attachment-viewer-content" role="dialog" aria-modal="true">
+            <div class="attachment-viewer-header">
+                <div>
+                    <div class="attachment-viewer-name" id="attachment-viewer-name"></div>
+                    <div class="attachment-viewer-meta" id="attachment-viewer-meta"></div>
+                </div>
+                <button type="button" class="btn-close" id="attachment-viewer-close" aria-label="첨부 파일 닫기">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="attachment-viewer-body" id="attachment-viewer-body">
+                <p class="attachment-viewer-placeholder">첨부 파일을 선택하면 미리보기가 여기 표시됩니다.</p>
+            </div>
         </div>
     </div>
 
