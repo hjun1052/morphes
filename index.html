@@ -6,42 +6,9 @@
     <title>MORPHES</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <!-- 로그인 페이지 -->
-    <div id="login-page" class="page active">
-        <div class="login-container">
-            <div class="login-card">
-                <div class="login-header">
-                    <div class="logo">
-                        <img src="logo.png" alt="MORPHES Logo" width="128" height="128">
-                    </div>
-                    <h1>MORPHES</h1>
-                    <p class="subtitle">AI 프롬프트 재작성.</p>
-                </div>
-                
-                <form id="login-form" class="login-form">
-                    <div class="form-group">
-                        <label for="login-email">이메일</label>
-                        <input type="email" id="login-email" placeholder="your@email.com" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="login-password">비밀번호</label>
-                        <input type="password" id="login-password" placeholder="••••••••" required>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary btn-full">로그인</button>
-                    
-                    <div class="login-footer">
-                        <p>데모 계정: demo@MORPHES.com / demo1234</p>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
+<body class="app-loading">
     <!-- 메인 애플리케이션 -->
-    <div id="app-page" class="page">
+    <div id="app-page">
         <!-- 사이드바 -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -88,6 +55,7 @@
                 </button>
             </div>
         </aside>
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
         <!-- 메인 컨텐츠 -->
         <main class="main-content">
@@ -123,10 +91,31 @@
                         <h2>MORPHES에 오신 것을 환영합니다</h2>
                         <p>원하시는 프롬프트를 자연스러운 대화로 만들어보세요</p>
                         <div class="example-prompts">
-                            <button class="example-prompt">블로그 글 작성 프롬프트 만들기</button>
-                            <button class="example-prompt">코드 리뷰 프롬프트 생성</button>
-                            <button class="example-prompt">데이터 분석 도우미 프롬프트</button>
-                            <button class="example-prompt">창의적 글쓰기 프롬프트</button>
+                            <button class="example-prompt" data-prompt="블로그 글 작성 프롬프트 만들기">블로그 글 작성 프롬프트 만들기</button>
+                            <button class="example-prompt" data-prompt="코드 리뷰 프롬프트 생성">코드 리뷰 프롬프트 생성</button>
+                            <button class="example-prompt" data-prompt="데이터 분석 도우미 프롬프트">데이터 분석 도우미 프롬프트</button>
+                            <button class="example-prompt" data-prompt="창의적 글쓰기 프롬프트">창의적 글쓰기 프롬프트</button>
+                        </div>
+                        <div class="suggested-section">
+                            <h3>추천 항목</h3>
+                            <div class="suggested-grid">
+                                <button class="suggested-card" data-prompt="콘텐츠 마케팅 팀을 위한 4주 분량 SNS 캠페인 브리프 작성">
+                                    <span class="suggested-title">콘텐츠 마케팅 브리프</span>
+                                    <span class="suggested-description">SNS 채널별 핵심 메시지와 KPI 정의</span>
+                                </button>
+                                <button class="suggested-card" data-prompt="신규 SaaS 제품 출시를 위한 이메일 런칭 시퀀스를 설계">
+                                    <span class="suggested-title">제품 런칭 시퀀스</span>
+                                    <span class="suggested-description">사전 홍보·런칭·후속 메일까지 구성</span>
+                                </button>
+                                <button class="suggested-card" data-prompt="사내 워크샵 진행자를 위한 아이스브레이킹 질문 리스트 작성">
+                                    <span class="suggested-title">워크샵 아이스브레이킹</span>
+                                    <span class="suggested-description">팀 빌딩용 질문 세트 10개 추천</span>
+                                </button>
+                                <button class="suggested-card" data-prompt="고객 인터뷰 기록을 분석하여 주요 인사이트와 행동 항목 도출">
+                                    <span class="suggested-title">고객 인터뷰 분석</span>
+                                    <span class="suggested-description">인사이트·진행상 문제·다음 단계 요약</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
