@@ -355,6 +355,36 @@ body {
     background: var(--background-secondary);
 }
 
+.context-menu {
+    position: absolute;
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    z-index: 600;
+}
+
+.context-menu.hidden {
+    display: none;
+}
+
+.context-menu button {
+    border: none;
+    background: transparent;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.context-menu button:hover {
+    background: var(--background-secondary);
+}
+
 .chat-history {
     flex: 1;
     padding: 12px;
@@ -362,7 +392,6 @@ body {
 
 .chat-history-item {
     padding: 12px;
-    margin-bottom: 4px;
     border-radius: 8px;
     cursor: pointer;
     transition: var(--transition);
@@ -375,6 +404,9 @@ body {
 
 .chat-history-item .chat-title {
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .chat-history-item:hover {
@@ -1013,6 +1045,9 @@ body {
     padding: 16px;
     background: var(--background);
     box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .memory-card p {
@@ -1037,6 +1072,27 @@ body {
 .memory-meta {
     font-size: 13px;
     color: var(--text-secondary);
+}
+
+.memory-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.memory-delete-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+
+.memory-delete-btn:hover {
+    background: var(--background-secondary);
+    color: var(--primary-color);
 }
 
 .project-actions,
