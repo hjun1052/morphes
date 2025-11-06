@@ -492,6 +492,9 @@ body {
     align-items: center;
     gap: 16px;
     background: var(--background);
+    position: sticky;
+    top: 0;
+    z-index: 150;
 }
 
 .btn-toggle-sidebar {
@@ -1870,7 +1873,7 @@ body {
         left: 0;
         top: 0;
         height: 100vh;
-        z-index: 100;
+        z-index: 400;
         transform: translateX(-100%);
         width: 260px;
         box-shadow: var(--shadow-lg);
@@ -1888,7 +1891,7 @@ body {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 90;
+        z-index: 350;
         display: none;
     }
 
@@ -1917,13 +1920,16 @@ body {
 
     .service-selector {
         flex: 1;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
     }
-
+    
     .service-selector label {
         font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
     }
 
     .new-chat-group {
@@ -1936,7 +1942,8 @@ body {
     }
 
     .service-dropdown {
-        width: 100%;
+        width: auto;
+        flex: 1;
     }
     
     .messages-container {
@@ -2095,6 +2102,25 @@ body {
         font-size: 12px;
         padding: 4px 10px;
     }
+    
+    .service-selector {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .service-dropdown {
+        flex: 1;
+    }
+
+    .label-desktop {
+        display: none;
+    }
+
+    .label-mobile {
+        display: inline;
+        font-size: 13px;
+    }
 
     .onboarding-content {
         width: 96%;
@@ -2166,4 +2192,17 @@ body {
     background: var(--primary-hover);
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+}
+#settings-modal .modal-content {
+    max-width: 720px;
+    width: 95%;
+}
+
+.account-email {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.label-mobile {
+    display: none;
 }
