@@ -1512,6 +1512,14 @@ body {
     align-items: flex-end;
 }
 
+.attach-controls {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    position: relative;
+}
+
 #message-input {
     padding: 14px 18px;
     border: 1.5px solid var(--border-color);
@@ -1572,6 +1580,49 @@ body {
 .btn-attach:hover {
     border-color: var(--primary-color);
     color: var(--primary-color);
+}
+
+.btn-attach-main {
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.attach-menu {
+    position: absolute;
+    bottom: 58px;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    gap: 4px;
+    z-index: 50;
+}
+
+.attach-menu.hidden {
+    display: none;
+}
+
+.attach-menu button {
+    border: none;
+    background: transparent;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-primary);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.attach-menu button:hover {
+    background: var(--background-secondary);
 }
 
 .attachment-chip {
@@ -2056,6 +2107,115 @@ body {
     font-size: 13px;
     color: var(--text-secondary);
     margin-top: 4px;
+}
+
+.github-attach-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.github-attach-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.github-attach-status {
+    min-height: 18px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.github-attach-status.error {
+    color: #C62828;
+}
+
+.github-attach-status.success {
+    color: var(--primary-color);
+}
+
+.github-attach-status.loading {
+    color: var(--text-secondary);
+}
+
+.github-repo-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.github-repo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.github-repo-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.github-repo-status {
+    min-height: 20px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.github-repo-status.error {
+    color: #C62828;
+}
+
+.github-repo-status.success {
+    color: var(--primary-color);
+}
+
+.github-repo-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+}
+
+.github-repo-card {
+    border: 1px solid var(--border-color);
+    background: var(--background-secondary);
+    font: inherit;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.github-repo-card:hover {
+    border-color: var(--primary-color);
+    background: var(--background);
+}
+
+.github-repo-card:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.github-repo-card h4 {
+    font-size: 15px;
+    margin: 0;
+}
+
+.github-repo-card p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.github-repo-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
 }
 
 /* 로딩 애니메이션 */

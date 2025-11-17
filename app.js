@@ -12,7 +12,13 @@ const APP_STATE = {
     promptLibrary: [],
     promptGallery: [],
     currentProjectId: null,
-    currentAttachments: []
+    currentAttachments: [],
+    githubAttachmentLoading: false,
+    attachMenuOpen: false,
+    githubToken: null,
+    githubRepos: [],
+    githubUser: null,
+    githubRepoLoading: false
 };
 
 const TEXT_PREVIEW_LIMIT = 4000;
@@ -312,7 +318,7 @@ const SYSTEM_PROMPT = `당신은 고급 AI 프롬프트 엔지니어입니다.
 🎯 **최종 목표**
 - 사용자가 복잡한 아이디어를 명확하고 실행 가능한 프롬프트 문장으로 바꿀 수 있게 돕는 것.
 - 당신은 오직 프롬프트를 “작성”하고, “개선”하고, “확정”합니다.
-- 절대로 프롬프트의 내용을 “실행”하지 않습니다.`;
+- 절대로 프롬프트의 내용을 “실행”하지 않습니다.0`;
 
 // 마크다운 렌더링 옵션 설정
 if (window.marked) {
@@ -335,12 +341,21 @@ class StorageManager {
     }
 
     static load(key) {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
+        try {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : null;
+        } catch (error) {
+            console.error('Storage load failed:', error);
+            return null;
+        }
     }
 
     static remove(key) {
-        localStorage.removeItem(key);
+        try {
+            localStorage.removeItem(key);
+        } catch (error) {
+            console.error('Storage remove failed:', error);
+        }
     }
 
     static saveChats(chats) {
@@ -434,6 +449,20 @@ class StorageManager {
         return this.load('promptcraft_prompt_gallery');
     }
 
+    static saveGithubToken(userId, token) {
+        if (!userId) return;
+        if (!token) {
+            this.remove(`promptcraft_github_token_${userId}`);
+            return;
+        }
+        this.save(`promptcraft_github_token_${userId}`, token);
+    }
+
+    static loadGithubToken(userId) {
+        if (!userId) return null;
+        return this.load(`promptcraft_github_token_${userId}`);
+    }
+
     static prepareChatsForStorage(chats, options = {}) {
         if (!chats || typeof chats !== 'object') return {};
         const prepared = {};
@@ -481,6 +510,15 @@ function sanitizeAttachmentForStorage(file = {}, options = {}) {
     };
     if (file.textPreview) {
         sanitized.textPreview = file.textPreview;
+    }
+    if (file.externalUrl) {
+        sanitized.externalUrl = file.externalUrl;
+    }
+    if (file.source) {
+        sanitized.source = file.source;
+    }
+    if (file.sourceMeta) {
+        sanitized.sourceMeta = file.sourceMeta;
     }
     const hasData = typeof file.dataUrl === 'string' && file.dataUrl.length > 0;
     const withinLimit = hasData && file.dataUrl.length <= ATTACHMENT_STORAGE_CHAR_LIMIT;
@@ -565,12 +603,30 @@ const elements = {
     messageInput: document.getElementById('message-input'),
     sendBtn: document.getElementById('send-btn'),
     attachmentInput: document.getElementById('chat-attachment'),
+    attachMenuToggle: document.getElementById('attach-menu-toggle'),
+    attachMenu: document.getElementById('attach-menu'),
     attachmentBar: document.getElementById('attachment-bar'),
     attachmentViewer: document.getElementById('attachment-viewer'),
     attachmentViewerBody: document.getElementById('attachment-viewer-body'),
     attachmentViewerName: document.getElementById('attachment-viewer-name'),
     attachmentViewerMeta: document.getElementById('attachment-viewer-meta'),
     attachmentViewerClose: document.getElementById('attachment-viewer-close'),
+    githubAttachModal: document.getElementById('github-attach-modal'),
+    githubAttachForm: document.getElementById('github-attach-form'),
+    githubFileUrlInput: document.getElementById('github-file-url'),
+    githubFileRefInput: document.getElementById('github-file-ref'),
+    githubAttachStatus: document.getElementById('github-attach-status'),
+    githubModalClose: document.getElementById('github-modal-close'),
+    githubModalCancel: document.getElementById('github-modal-cancel'),
+    githubAttachSubmit: document.getElementById('github-attach-submit'),
+    githubRepoModal: document.getElementById('github-repo-modal'),
+    githubRepoForm: document.getElementById('github-repo-form'),
+    githubTokenInput: document.getElementById('github-token-input'),
+    githubTokenConnect: document.getElementById('github-token-connect'),
+    githubTokenClear: document.getElementById('github-token-clear'),
+    githubRepoStatus: document.getElementById('github-repo-status'),
+    githubRepoList: document.getElementById('github-repo-list'),
+    githubRepoClose: document.getElementById('github-repo-close'),
     aiServiceSelect: document.getElementById('ai-service'),
     
     // 모달
@@ -634,6 +690,7 @@ function init() {
     APP_STATE.projects = StorageManager.loadProjects(APP_STATE.currentUser.email);
     APP_STATE.promptLibrary = StorageManager.loadPromptLibrary(APP_STATE.currentUser.email);
     APP_STATE.promptGallery = StorageManager.loadPromptGallery() || DEFAULT_PROMPT_GALLERY;
+    APP_STATE.githubToken = StorageManager.loadGithubToken(APP_STATE.currentUser.email);
     normalizeProjects();
 
     if (APP_STATE.apiKey && elements.openaiApiKeyInput) {
@@ -728,6 +785,47 @@ function registerEventListeners() {
     }
     if (elements.attachmentBar) {
         elements.attachmentBar.addEventListener('click', handleAttachmentPreviewClick);
+    }
+    if (elements.attachMenuToggle) {
+        elements.attachMenuToggle.addEventListener('click', toggleAttachMenu);
+    }
+    if (elements.attachMenu) {
+        elements.attachMenu.addEventListener('click', handleAttachMenuClick);
+    }
+    if (elements.githubAttachForm) {
+        elements.githubAttachForm.addEventListener('submit', handleGithubAttachSubmit);
+    }
+    if (elements.githubModalClose) {
+        elements.githubModalClose.addEventListener('click', closeGithubAttachModal);
+    }
+    if (elements.githubModalCancel) {
+        elements.githubModalCancel.addEventListener('click', closeGithubAttachModal);
+    }
+    if (elements.githubAttachModal) {
+        elements.githubAttachModal.addEventListener('click', (event) => {
+            if (event.target === elements.githubAttachModal) {
+                closeGithubAttachModal();
+            }
+        });
+    }
+    if (elements.githubRepoForm) {
+        elements.githubRepoForm.addEventListener('submit', handleGithubTokenSubmit);
+    }
+    if (elements.githubTokenClear) {
+        elements.githubTokenClear.addEventListener('click', handleGithubTokenClear);
+    }
+    if (elements.githubRepoClose) {
+        elements.githubRepoClose.addEventListener('click', closeGithubRepoModal);
+    }
+    if (elements.githubRepoModal) {
+        elements.githubRepoModal.addEventListener('click', (event) => {
+            if (event.target === elements.githubRepoModal) {
+                closeGithubRepoModal();
+            }
+        });
+    }
+    if (elements.githubRepoList) {
+        elements.githubRepoList.addEventListener('click', handleGithubRepoListClick);
     }
     if (elements.messagesContainer) {
         elements.messagesContainer.addEventListener('click', handleAttachmentClick);
@@ -828,6 +926,11 @@ function registerEventListeners() {
                 closeChatContextMenu();
             }
         }
+        if (APP_STATE.attachMenuOpen) {
+            if (!elements.attachMenu?.contains(event.target) && !elements.attachMenuToggle?.contains(event.target)) {
+                closeAttachMenu();
+            }
+        }
     });
     window.addEventListener('scroll', closeChatContextMenu, true);
     window.addEventListener('resize', closeChatContextMenu);
@@ -836,6 +939,9 @@ function registerEventListeners() {
             closeChatContextMenu();
             closeProjectMenu();
             closeAttachmentViewer();
+            closeGithubAttachModal();
+            closeGithubRepoModal();
+            closeAttachMenu();
         }
     });
 
@@ -1024,17 +1130,694 @@ async function handleAttachmentChange(event) {
     }
 }
 
+function toggleAttachMenu() {
+    if (APP_STATE.attachMenuOpen) {
+        closeAttachMenu();
+    } else {
+        openAttachMenu();
+    }
+}
+
+function openAttachMenu() {
+    if (!elements.attachMenu) return;
+    elements.attachMenu.classList.remove('hidden');
+    if (elements.attachMenuToggle) {
+        elements.attachMenuToggle.setAttribute('aria-expanded', 'true');
+    }
+    APP_STATE.attachMenuOpen = true;
+}
+
+function closeAttachMenu() {
+    if (!elements.attachMenu) return;
+    elements.attachMenu.classList.add('hidden');
+    if (elements.attachMenuToggle) {
+        elements.attachMenuToggle.setAttribute('aria-expanded', 'false');
+    }
+    APP_STATE.attachMenuOpen = false;
+}
+
+function handleAttachMenuClick(event) {
+    const target = event.target.closest('[data-attach-action]');
+    if (!target) return;
+    event.preventDefault();
+    const action = target.dataset.attachAction;
+    closeAttachMenu();
+    if (action === 'upload') {
+        elements.attachmentInput?.click();
+    } else if (action === 'link') {
+        openGithubAttachModal();
+    } else if (action === 'github') {
+        openGithubRepoModal();
+    }
+}
+
+function openGithubAttachModal() {
+    if (!elements.githubAttachModal) return;
+    closeAttachMenu();
+    resetGithubAttachForm();
+    openModal(elements.githubAttachModal);
+    if (elements.githubFileUrlInput) {
+        elements.githubFileUrlInput.focus();
+    }
+}
+
+function closeGithubAttachModal() {
+    if (!elements.githubAttachModal) return;
+    if (!elements.githubAttachModal.classList.contains('active')) return;
+    closeModal(elements.githubAttachModal);
+    resetGithubAttachForm();
+}
+
+function resetGithubAttachForm() {
+    if (elements.githubAttachForm) {
+        elements.githubAttachForm.reset();
+    }
+    setGithubAttachStatus('');
+    setGithubAttachLoading(false);
+}
+
+function setGithubAttachStatus(message = '', tone = 'info') {
+    if (!elements.githubAttachStatus) return;
+    const statusEl = elements.githubAttachStatus;
+    statusEl.textContent = message;
+    statusEl.classList.remove('error', 'success', 'loading');
+    if (!message) {
+        return;
+    }
+    if (['error', 'success', 'loading'].includes(tone)) {
+        statusEl.classList.add(tone);
+    }
+}
+
+function setGithubAttachLoading(isLoading) {
+    APP_STATE.githubAttachmentLoading = Boolean(isLoading);
+    if (!elements.githubAttachSubmit) return;
+    const submitBtn = elements.githubAttachSubmit;
+    if (!submitBtn.dataset.defaultText) {
+        submitBtn.dataset.defaultText = submitBtn.textContent || 'GitHub에서 불러오기';
+    }
+    submitBtn.disabled = APP_STATE.githubAttachmentLoading;
+    if (APP_STATE.githubAttachmentLoading) {
+        submitBtn.textContent = '불러오는 중...';
+    } else {
+        submitBtn.textContent = submitBtn.dataset.defaultText;
+    }
+}
+
+async function handleGithubAttachSubmit(event) {
+    event.preventDefault();
+    if (APP_STATE.githubAttachmentLoading) return;
+
+    const urlValue = (elements.githubFileUrlInput?.value || '').trim();
+    const refValue = (elements.githubFileRefInput?.value || '').trim();
+
+    if (!urlValue) {
+        setGithubAttachStatus('GitHub 파일 URL을 입력해주세요.', 'error');
+        elements.githubFileUrlInput?.focus();
+        return;
+    }
+
+    const parsed = parseGithubFileUrl(urlValue);
+    if (!parsed) {
+        setGithubAttachStatus('지원하지 않는 GitHub URL입니다. blob/raw 주소를 확인해주세요.', 'error');
+        return;
+    }
+    if (refValue) {
+        parsed.branch = refValue;
+    }
+    if (!parsed.branch || !parsed.filePath) {
+        setGithubAttachStatus('브랜치 또는 파일 경로를 확인할 수 없습니다.', 'error');
+        return;
+    }
+
+    try {
+        setGithubAttachLoading(true);
+        setGithubAttachStatus('GitHub에서 파일을 불러오는 중입니다...', 'loading');
+        const attachment = await fetchGithubAttachment(parsed);
+        APP_STATE.currentAttachments = [
+            ...(APP_STATE.currentAttachments || []),
+            attachment
+        ];
+        renderAttachmentPreview();
+        closeGithubAttachModal();
+    } catch (error) {
+        console.error('GitHub attachment error:', error);
+        const message = error?.message || 'GitHub 파일을 불러오지 못했습니다.';
+        setGithubAttachStatus(message, 'error');
+    } finally {
+        setGithubAttachLoading(false);
+    }
+}
+
+function openGithubRepoModal() {
+    if (!elements.githubRepoModal) return;
+    closeAttachMenu();
+    openModal(elements.githubRepoModal);
+    if (elements.githubTokenInput) {
+        elements.githubTokenInput.value = APP_STATE.githubToken || '';
+    }
+    setGithubRepoStatus(APP_STATE.githubToken ? '레포지토리를 불러오려면 연결 버튼을 눌러주세요.' : '먼저 GitHub 토큰을 입력하고 연결해주세요.');
+    renderGithubRepoList();
+    if (APP_STATE.githubToken && APP_STATE.githubRepos.length === 0 && !APP_STATE.githubRepoLoading) {
+        fetchGithubUserAndRepos();
+    }
+}
+
+function closeGithubRepoModal() {
+    if (!elements.githubRepoModal) return;
+    if (!elements.githubRepoModal.classList.contains('active')) return;
+    closeModal(elements.githubRepoModal);
+    setGithubRepoLoading(false);
+}
+
+function setGithubRepoStatus(message = '', tone = 'info') {
+    if (!elements.githubRepoStatus) return;
+    const statusEl = elements.githubRepoStatus;
+    statusEl.textContent = message;
+    statusEl.classList.remove('error', 'success', 'loading');
+    if (tone && ['error', 'success', 'loading'].includes(tone)) {
+        statusEl.classList.add(tone);
+    }
+}
+
+function setGithubRepoLoading(isLoading) {
+    APP_STATE.githubRepoLoading = Boolean(isLoading);
+    if (elements.githubTokenConnect) {
+        if (!elements.githubTokenConnect.dataset.defaultText) {
+            elements.githubTokenConnect.dataset.defaultText = elements.githubTokenConnect.textContent || '연결';
+        }
+        elements.githubTokenConnect.disabled = APP_STATE.githubRepoLoading;
+        elements.githubTokenConnect.textContent = APP_STATE.githubRepoLoading ? '불러오는 중...' : elements.githubTokenConnect.dataset.defaultText;
+    }
+    if (elements.githubRepoList) {
+        elements.githubRepoList.classList.toggle('loading', APP_STATE.githubRepoLoading);
+    }
+}
+
+function handleGithubTokenSubmit(event) {
+    event.preventDefault();
+    if (APP_STATE.githubRepoLoading) return;
+    const token = (elements.githubTokenInput?.value || '').trim();
+    if (!token) {
+        setGithubRepoStatus('토큰을 입력해주세요.', 'error');
+        if (elements.githubTokenInput) {
+            elements.githubTokenInput.focus();
+        }
+        return;
+    }
+    APP_STATE.githubToken = token;
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.saveGithubToken(APP_STATE.currentUser.email, token);
+    }
+    fetchGithubUserAndRepos();
+}
+
+function handleGithubTokenClear() {
+    if (APP_STATE.githubRepoLoading) return;
+    APP_STATE.githubToken = null;
+    APP_STATE.githubRepos = [];
+    APP_STATE.githubUser = null;
+    if (APP_STATE.currentUser?.email) {
+        StorageManager.saveGithubToken(APP_STATE.currentUser.email, null);
+    }
+    if (elements.githubTokenInput) {
+        elements.githubTokenInput.value = '';
+        elements.githubTokenInput.focus();
+    }
+    renderGithubRepoList();
+    setGithubRepoStatus('GitHub 연결이 해제되었습니다.');
+}
+
+async function fetchGithubUserAndRepos() {
+    if (!APP_STATE.githubToken) {
+        setGithubRepoStatus('토큰을 입력해주세요.', 'error');
+        return;
+    }
+    setGithubRepoLoading(true);
+    setGithubRepoStatus('GitHub 레포지토리를 불러오는 중입니다...', 'loading');
+    try {
+        const headers = buildGithubAuthHeaders();
+        const userResponse = await fetch('https://api.github.com/user', { headers });
+        if (!userResponse.ok) {
+            throw new Error(userResponse.status === 401 ? '토큰이 유효하지 않습니다.' : 'GitHub 사용자 정보를 불러오지 못했습니다.');
+        }
+        const user = await userResponse.json();
+        APP_STATE.githubUser = user;
+
+        const reposResponse = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated&direction=desc', { headers });
+        if (!reposResponse.ok) {
+            throw new Error('레포지토리 목록을 불러오지 못했습니다.');
+        }
+        const repos = await reposResponse.json();
+        APP_STATE.githubRepos = Array.isArray(repos) ? repos : [];
+        if (APP_STATE.githubRepos.length === 0) {
+            setGithubRepoStatus('연결된 레포지토리가 없습니다. 권한을 확인해주세요.', 'error');
+        } else {
+            setGithubRepoStatus(`${user.login} 계정에서 ${APP_STATE.githubRepos.length}개의 레포지토리를 불러왔습니다.`, 'success');
+        }
+        renderGithubRepoList();
+    } catch (error) {
+        console.error('GitHub repo fetch error:', error);
+        setGithubRepoStatus(error?.message || 'GitHub 레포지토리를 불러오지 못했습니다.', 'error');
+    } finally {
+        setGithubRepoLoading(false);
+    }
+}
+
+function buildGithubAuthHeaders() {
+    const headers = {
+        Accept: 'application/vnd.github+json'
+    };
+    if (APP_STATE.githubToken) {
+        headers.Authorization = `Bearer ${APP_STATE.githubToken}`;
+    }
+    return headers;
+}
+
+function renderGithubRepoList() {
+    if (!elements.githubRepoList) return;
+    if (!APP_STATE.githubRepos || APP_STATE.githubRepos.length === 0) {
+        elements.githubRepoList.innerHTML = '<p class="help-text">표시할 레포지토리가 없습니다.</p>';
+        return;
+    }
+    const cards = APP_STATE.githubRepos.map((repo, index) => {
+        const description = repo.description ? escapeHtml(repo.description) : '설명이 없습니다.';
+        const language = repo.language || '언어 정보 없음';
+        const updated = repo.updated_at ? new Date(repo.updated_at).toLocaleString() : '';
+        const privacy = repo.private ? 'Private' : 'Public';
+        return `
+            <button type="button" class="github-repo-card" data-repo-index="${index}">
+                <h4>${escapeHtml(repo.full_name || repo.name)}</h4>
+                <p>${description}</p>
+                <div class="github-repo-meta">${language} · ${privacy}${updated ? ` · ${updated}` : ''}</div>
+            </button>
+        `;
+    }).join('');
+    elements.githubRepoList.innerHTML = cards;
+}
+
+function handleGithubRepoListClick(event) {
+    if (APP_STATE.githubRepoLoading) return;
+    const card = event.target.closest('.github-repo-card');
+    if (!card) return;
+    const index = Number(card.dataset.repoIndex);
+    if (Number.isNaN(index) || !APP_STATE.githubRepos[index]) return;
+    attachGithubRepository(APP_STATE.githubRepos[index]);
+}
+
+async function attachGithubRepository(repo) {
+    if (!repo) return;
+    try {
+        setGithubRepoLoading(true);
+        setGithubRepoStatus(`${repo.full_name} 레포지토리를 불러오는 중입니다...`, 'loading');
+        const archive = await downloadGithubRepoArchive(repo);
+        const attachment = buildGithubRepoAttachment(repo, archive);
+        APP_STATE.currentAttachments = [
+            ...(APP_STATE.currentAttachments || []),
+            attachment
+        ];
+        renderAttachmentPreview();
+        closeGithubRepoModal();
+    } catch (error) {
+        console.error('GitHub repo attachment error:', error);
+        setGithubRepoStatus(error?.message || '레포지토리를 첨부하지 못했습니다.', 'error');
+    } finally {
+        setGithubRepoLoading(false);
+    }
+}
+
+async function downloadGithubRepoArchive(repo) {
+    const token = APP_STATE.githubToken;
+    if (!token) {
+        throw new Error(
+            'GitHub 토큰이 필요합니다. ' +
+            '"깃허브에서 가져오기" 버튼을 클릭하여 토큰을 등록해주세요.'
+        );
+    }
+
+    const owner = repo.owner?.login;
+    const repoName = repo.name;
+    const ref = repo.default_branch || 'main';
+
+    if (!owner || !repoName) {
+        throw new Error('레포지토리 정보가 올바르지 않습니다.');
+    }
+
+    // GitHub API의 zipball 엔드포인트는 codeload.github.com으로 리다이렉트하는데
+    // 브라우저에서 CORS 에러가 발생합니다.
+    // 해결책: redirect: 'manual'을 사용하여 리다이렉트를 차단하고
+    // Location 헤더에서 실제 다운로드 URL을 가져옵니다.
+    const apiUrl = `https://api.github.com/repos/${owner}/${repoName}/zipball/${ref}`;
+
+    try {
+        // Step 1: Get redirect URL without following it
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28'
+            },
+            redirect: 'manual' // Don't follow redirects automatically
+        });
+
+        if (response.type === 'opaqueredirect' || response.status === 0) {
+            // 리다이렉트가 발생했지만 CORS로 인해 Location 헤더를 읽을 수 없습니다
+            throw new Error(
+                '브라우저 보안 정책으로 인해 레포지토리 아카이브를 다운로드할 수 없습니다.\n\n' +
+                '대신 "링크에서 가져오기(🔗)" 기능을 사용하여 필요한 파일을 개별적으로 첨부해주세요.\n' +
+                `예: https://github.com/${owner}/${repoName}/blob/${ref}/README.md`
+            );
+        }
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('GitHub 토큰이 만료되었거나 유효하지 않습니다. 토큰을 다시 등록해주세요.');
+            } else if (response.status === 404) {
+                throw new Error('레포지토리를 찾을 수 없습니다. 권한을 확인해주세요.');
+            } else if (response.status === 403) {
+                throw new Error('API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+            }
+            throw new Error(`GitHub API 오류 (${response.status})`);
+        }
+
+        // If we got here, try to get the blob (shouldn't happen with redirect)
+        const blob = await response.blob();
+        const sizeMB = blob.size / (1024 * 1024);
+
+        if (sizeMB > 100) {
+            console.warn(`Large repository: ${sizeMB.toFixed(2)}MB`);
+        }
+
+        const dataUrl = await convertBlobToDataUrl(blob);
+
+        return {
+            dataUrl: dataUrl,
+            size: blob.size,
+            type: blob.type || 'application/zip'
+        };
+    } catch (error) {
+        console.error('GitHub archive download error:', error);
+
+        // Re-throw if it's already our custom error
+        if (error.message && error.message.includes('링크에서 가져오기')) {
+            throw error;
+        }
+
+        if (error.message && error.message.includes('Failed to fetch')) {
+            throw new Error(
+                '브라우저 보안 정책(CORS)으로 인해 GitHub 레포지토리 아카이브를 직접 다운로드할 수 없습니다.\n\n' +
+                '대신 "링크에서 가져오기(🔗)" 기능을 사용하여 필요한 파일을 개별적으로 첨부해주세요.\n' +
+                `레포지토리: https://github.com/${owner}/${repoName}`
+            );
+        }
+
+        throw error;
+    }
+}
+
+function buildGithubRepoAttachment(repo, archive = {}) {
+    const ref = getGithubRepoRef(repo);
+    const name = `${repo.full_name || repo.name || 'repository'}-${ref}.zip`;
+    const size = typeof archive.size === 'number'
+        ? archive.size
+        : (typeof repo.size === 'number' ? repo.size * 1024 : undefined);
+    const preview = buildGithubRepoPreview(repo, ref);
+    return {
+        id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        name,
+        size,
+        type: 'application/zip',
+        dataUrl: archive.dataUrl || '',
+        textPreview: preview,
+        source: 'github_repo',
+        externalUrl: repo.html_url,
+        sourceMeta: {
+            repoId: repo.id,
+            owner: repo.owner?.login,
+            repo: repo.name,
+            fullName: repo.full_name,
+            defaultBranch: repo.default_branch,
+            private: repo.private,
+            htmlUrl: repo.html_url
+        }
+    };
+}
+
+function buildGithubRepoPreview(repo, ref) {
+    const lines = [
+        `레포지토리: ${repo.full_name || repo.name}`,
+        `기본 브랜치: ${ref}`,
+        `설명: ${repo.description || '설명 없음'}`,
+        `언어: ${repo.language || '언어 정보 없음'}`,
+        `공개 여부: ${repo.private ? 'Private' : 'Public'}`,
+        `마지막 업데이트: ${repo.updated_at ? new Date(repo.updated_at).toLocaleString() : '알 수 없음'}`,
+        `GitHub URL: ${repo.html_url}`
+    ];
+    return lines.join('\n');
+}
+
+function getGithubRepoRef(repo) {
+    return repo?.default_branch || 'main';
+}
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+    if (typeof btoa === 'function') {
+        return btoa(binary);
+    }
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(bytes).toString('base64');
+    }
+    throw new Error('base64 인코딩을 지원하지 않습니다.');
+}
+
+function convertBlobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            resolve(reader.result);
+        };
+        reader.onerror = () => {
+            reject(new Error('파일 변환 중 오류가 발생했습니다.'));
+        };
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function fetchGithubAttachment(meta = {}) {
+    if (!meta.owner || !meta.repo || !meta.filePath) {
+        throw new Error('GitHub 파일 정보를 확인할 수 없습니다.');
+    }
+    const rawUrl = buildRawGithubUrl(meta);
+    let response;
+    try {
+        response = await fetch(rawUrl, {
+            headers: {
+                Accept: 'application/vnd.github.v3.raw'
+            }
+        });
+    } catch (error) {
+        throw new Error('네트워크 오류로 GitHub 파일을 불러오지 못했습니다.');
+    }
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new Error('파일을 찾을 수 없습니다. 경로나 브랜치를 확인해주세요.');
+        }
+        throw new Error('GitHub 파일을 불러오지 못했습니다.');
+    }
+    const text = await response.text();
+    const fileName = (meta.filePath.split('/').pop() || `${meta.repo}.txt`).trim();
+    const mimeType = inferMimeTypeFromFilename(fileName);
+    return {
+        id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        name: fileName,
+        size: estimateTextSize(text),
+        type: mimeType,
+        dataUrl: encodeTextToDataUrl(text, mimeType),
+        textPreview: truncateTextPreview(text),
+        source: 'github',
+        sourceMeta: {
+            owner: meta.owner,
+            repo: meta.repo,
+            branch: meta.branch,
+            path: meta.filePath,
+            url: meta.originalUrl,
+            rawUrl
+        }
+    };
+}
+
+function parseGithubFileUrl(inputUrl = '') {
+    const trimmed = inputUrl.trim();
+    if (!trimmed) return null;
+    let normalized = trimmed;
+    if (!/^https?:\/\//i.test(normalized)) {
+        normalized = `https://github.com/${normalized.replace(/^\/+/, '')}`;
+    }
+    let targetUrl;
+    try {
+        targetUrl = new URL(normalized);
+    } catch (error) {
+        return null;
+    }
+    const hostname = targetUrl.hostname.replace(/^www\./i, '').toLowerCase();
+    if (hostname === 'github.com') {
+        const segments = targetUrl.pathname.split('/').filter(Boolean);
+        if (segments.length < 4) return null;
+        const owner = segments[0];
+        const repo = segments[1];
+        const mode = segments[2];
+        if (!['blob', 'raw'].includes(mode)) {
+            return null;
+        }
+        const remainder = segments.slice(3);
+        if (remainder.length < 2) return null;
+        const branch = decodeGithubComponent(remainder[0]);
+        const filePath = decodeGithubPath(remainder.slice(1).join('/'));
+        return {
+            owner,
+            repo,
+            branch,
+            filePath,
+            originalUrl: targetUrl.href
+        };
+    }
+    if (hostname === 'raw.githubusercontent.com') {
+        const segments = targetUrl.pathname.split('/').filter(Boolean);
+        if (segments.length < 4) return null;
+        const owner = segments[0];
+        const repo = segments[1];
+        const branch = decodeGithubComponent(segments[2]);
+        const filePath = decodeGithubPath(segments.slice(3).join('/'));
+        return {
+            owner,
+            repo,
+            branch,
+            filePath,
+            originalUrl: targetUrl.href
+        };
+    }
+    return null;
+}
+
+function decodeGithubPath(path = '') {
+    return path
+        .split('/')
+        .filter(segment => segment.length > 0)
+        .map(segment => decodeGithubComponent(segment))
+        .join('/');
+}
+
+function decodeGithubComponent(value = '') {
+    try {
+        return decodeURIComponent(value);
+    } catch (error) {
+        return value;
+    }
+}
+
+function buildRawGithubUrl(meta = {}) {
+    const owner = meta.owner ? encodeURIComponent(meta.owner) : '';
+    const repo = meta.repo ? encodeURIComponent(meta.repo) : '';
+    const branch = meta.branch ? encodeURIComponent(meta.branch) : '';
+    const path = encodeGithubPathSegments(meta.filePath || '');
+    if (!owner || !repo || !branch || !path) {
+        throw new Error('GitHub 파일 정보를 확인할 수 없습니다.');
+    }
+    return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+}
+
+function encodeGithubPathSegments(path = '') {
+    return path
+        .split('/')
+        .filter(segment => segment.length > 0)
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
+}
+
+function inferMimeTypeFromFilename(name = '') {
+    const extension = name.split('.').pop()?.toLowerCase() || '';
+    const map = {
+        js: 'text/javascript',
+        mjs: 'text/javascript',
+        cjs: 'text/javascript',
+        ts: 'text/typescript',
+        jsx: 'text/jsx',
+        tsx: 'text/tsx',
+        json: 'application/json',
+        md: 'text/markdown',
+        markdown: 'text/markdown',
+        yml: 'application/x-yaml',
+        yaml: 'application/x-yaml',
+        html: 'text/html',
+        css: 'text/css',
+        scss: 'text/x-scss',
+        sass: 'text/x-sass',
+        less: 'text/x-less',
+        py: 'text/x-python',
+        rb: 'text/x-ruby',
+        go: 'text/x-go',
+        java: 'text/x-java-source',
+        c: 'text/x-c',
+        h: 'text/x-c',
+        cpp: 'text/x-c++',
+        hpp: 'text/x-c++',
+        cs: 'text/x-csharp',
+        php: 'text/x-php',
+        rs: 'text/rust',
+        swift: 'text/x-swift',
+        kt: 'text/x-kotlin',
+        sql: 'application/sql',
+        sh: 'text/x-shellscript',
+        bat: 'application/x-msdos-program',
+        txt: 'text/plain'
+    };
+    return map[extension] || 'text/plain';
+}
+
+function estimateTextSize(text = '') {
+    if (typeof TextEncoder !== 'undefined') {
+        return new TextEncoder().encode(text).length;
+    }
+    try {
+        return unescape(encodeURIComponent(text)).length;
+    } catch (error) {
+        return text.length;
+    }
+}
+
+function encodeTextToDataUrl(text = '', mimeType = 'text/plain') {
+    try {
+        if (typeof btoa === 'function') {
+            return `data:${mimeType};base64,${btoa(unescape(encodeURIComponent(text)))}`;
+        }
+        if (typeof Buffer !== 'undefined') {
+            return `data:${mimeType};base64,${Buffer.from(text, 'utf-8').toString('base64')}`;
+        }
+    } catch (error) {
+        console.error('Failed to encode text attachment as data URL:', error);
+    }
+    return `data:${mimeType};base64,`;
+}
+
 function readFileAsAttachment(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async () => {
             try {
                 const attachment = {
-                id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                dataUrl: reader.result
+                    id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    dataUrl: reader.result
                 };
                 if (shouldExtractTextPreview(file)) {
                     try {
@@ -1119,6 +1902,7 @@ function removeAttachment(index) {
 }
 
 function getAttachmentIcon(file = {}) {
+    if (file.source === 'github_repo') return '🐙';
     if (isImageAttachment(file)) return '🖼';
     if (isPdfAttachment(file)) return '📕';
     if (isTextAttachment(file)) return '📄';
@@ -1211,11 +1995,12 @@ function closeAttachmentViewer() {
 }
 
 function openAttachmentInNewTab(attachment) {
-    if (!attachment?.dataUrl) {
+    const targetUrl = attachment?.dataUrl || attachment?.externalUrl;
+    if (!targetUrl) {
         alert('첨부 파일 데이터를 찾을 수 없습니다.');
         return;
     }
-    const popup = window.open(attachment.dataUrl, '_blank');
+    const popup = window.open(targetUrl, '_blank');
     if (!popup) {
         alert('팝업 차단을 해제해주세요.');
     }
@@ -1295,6 +2080,9 @@ function decodeTextFromDataUrl(dataUrl) {
 
 function buildAttachmentSummary(attachment = {}) {
     if (!attachment) return '';
+    if (attachment.source === 'github_repo') {
+        return buildGithubRepoAttachmentSummary(attachment);
+    }
     const name = attachment.name || '첨부 파일';
     const type = attachment.type || '알 수 없는 형식';
     const sizeLabel = typeof attachment.size === 'number' ? `, ${formatFileSize(attachment.size)}` : '';
@@ -1313,6 +2101,25 @@ function buildAttachmentSummary(attachment = {}) {
     }
     
     return `파일 첨부: ${header}\n이 형식은 직접 열 수 없어 메타데이터만 공유합니다.`;
+}
+
+function buildGithubRepoAttachmentSummary(attachment = {}) {
+    const meta = attachment.sourceMeta || {};
+    const sizeLabel = typeof attachment.size === 'number' ? formatFileSize(attachment.size) : '크기 미확인';
+    const lines = [
+        `GitHub 레포지토리: ${meta.fullName || attachment.name || 'repository'}`,
+        `기본 브랜치: ${meta.defaultBranch || 'main'}`,
+        `공개 여부: ${meta.private ? 'Private' : 'Public'}`,
+        `추정 크기: ${sizeLabel}`,
+    ];
+    if (attachment.externalUrl) {
+        lines.push(`GitHub URL: ${attachment.externalUrl}`);
+    }
+    if (attachment.textPreview) {
+        lines.push('요약:');
+        lines.push(attachment.textPreview);
+    }
+    return lines.join('\n');
 }
 
 function buildUserMessageContentParts(text, attachments = []) {
@@ -2265,6 +3072,9 @@ function handleLogout() {
     APP_STATE.conversationHistory = [];
     StorageManager.clearUser();
     APP_STATE.currentProjectId = null;
+    APP_STATE.githubRepos = [];
+    APP_STATE.githubUser = null;
+    APP_STATE.githubToken = null;
     document.body.classList.add('app-loading');
     document.body.classList.remove('app-ready');
     if (elements.sidebar) {

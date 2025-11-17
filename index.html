@@ -151,10 +151,24 @@
                 <div class="input-container">
                     <div class="attachment-bar hidden" id="attachment-bar"></div>
                     <form id="chat-form" class="chat-form">
-                        <label class="btn-attach" for="chat-attachment" title="파일 추가">
-                            +
+                        <div class="attach-controls">
+                            <button 
+                                type="button" 
+                                class="btn-attach btn-attach-main" 
+                                id="attach-menu-toggle" 
+                                title="첨부 메뉴 열기" 
+                                aria-haspopup="true" 
+                                aria-expanded="false"
+                            >
+                                +
+                            </button>
                             <input type="file" id="chat-attachment" multiple hidden>
-                        </label>
+                            <div class="attach-menu hidden" id="attach-menu" role="menu">
+                                <button type="button" data-attach-action="upload">📁 파일 업로드</button>
+                                <button type="button" data-attach-action="link">🔗 링크에서 가져오기</button>
+                                <button type="button" data-attach-action="github">🐙 깃허브에서 가져오기</button>
+                            </div>
+                        </div>
                         <textarea 
                             id="message-input" 
                             placeholder="어떤 프롬프트를 만들고 싶으신가요? (Shift + Enter로 줄바꿈)"
@@ -191,13 +205,15 @@
                     </div>
                     <div class="settings-panels">
                         <section class="settings-panel active" data-settings-panel="general">
-                            <div class="form-group">
-                                <label for="openai-api-key">OpenAI API Key</label>
-                                <input type="password" id="openai-api-key" placeholder="sk-...">
-                                <p class="help-text">API 키는 브라우저에만 저장되며 외부로 전송되지 않습니다</p>
-                            </div>
-                            <button class="btn-secondary" id="edit-profile-btn" type="button">사용자 설문 다시하기</button>
-                            <button class="btn-primary" id="save-settings">저장</button>
+                            <form id="settings-form">
+                                <div class="form-group">
+                                    <label for="openai-api-key">OpenAI API Key</label>
+                                    <input type="password" id="openai-api-key" placeholder="sk-..." name="openai-api-key" autocomplete="off">
+                                    <p class="help-text">API 키는 브라우저에만 저장되며 외부로 전송되지 않습니다</p>
+                                </div>
+                                <button class="btn-secondary" id="edit-profile-btn" type="button">사용자 설문 다시하기</button>
+                                <button class="btn-primary" id="save-settings" type="button">저장</button>
+                            </form>
                         </section>
                         <section class="settings-panel" data-settings-panel="memory">
                             <form id="memory-form" class="memory-form">
@@ -215,6 +231,71 @@
                         </section>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 링크 첨부 모달 -->
+    <div class="modal" id="github-attach-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>링크에서 가져오기</h2>
+                <button type="button" class="btn-close" id="github-modal-close" aria-label="링크 첨부 닫기">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="github-attach-form" class="github-attach-form">
+                    <div class="form-group">
+                        <label for="github-file-url">GitHub 파일 URL</label>
+                        <input type="url" id="github-file-url" placeholder="https://github.com/owner/repo/blob/main/path/to/file.js" required>
+                        <p class="help-text">퍼블릭 저장소의 blob/raw URL을 붙여넣어주세요.</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="github-file-ref">브랜치 혹은 커밋 (선택)</label>
+                        <input type="text" id="github-file-ref" placeholder="URL에 포함된 값이 우선됩니다.">
+                        <p class="help-text">URL에 브랜치가 없다면 여기 입력한 값으로 raw 파일을 불러옵니다.</p>
+                    </div>
+                    <div class="github-attach-status" id="github-attach-status" role="status" aria-live="polite"></div>
+                    <div class="github-attach-actions">
+                        <button type="button" class="btn-secondary" id="github-modal-cancel">취소</button>
+                        <button type="submit" class="btn-primary" id="github-attach-submit">링크에서 불러오기</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- GitHub 레포지토리 첨부 모달 -->
+    <div class="modal" id="github-repo-modal">
+        <div class="modal-content wide-modal">
+            <div class="modal-header">
+                <div>
+                    <h2>깃허브에서 가져오기</h2>
+                    <p class="modal-subtitle">GitHub 계정을 연결하고 레포지토리를 선택하면 전체가 하나의 첨부로 추가됩니다.</p>
+                </div>
+                <button type="button" class="btn-close" id="github-repo-close" aria-label="깃허브 첨부 닫기">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body github-repo-body">
+                <form id="github-repo-form" class="github-repo-form">
+                    <div class="form-group">
+                        <label for="github-token-input">GitHub Personal Access Token</label>
+                        <input type="password" id="github-token-input" placeholder="ghp_..." name="github-token" autocomplete="off">
+                        <p class="help-text">레포지토리 목록을 불러오려면 읽기 권한이 있는 토큰이 필요합니다. 브라우저에만 저장됩니다.</p>
+                    </div>
+                    <div class="github-repo-actions">
+                        <button type="button" class="btn-secondary" id="github-token-clear">연결 해제</button>
+                        <button type="submit" class="btn-primary" id="github-token-connect">연결</button>
+                    </div>
+                </form>
+                <div class="github-repo-status" id="github-repo-status" role="status" aria-live="polite"></div>
+                <div class="github-repo-list" id="github-repo-list"></div>
             </div>
         </div>
     </div>
