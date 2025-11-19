@@ -679,7 +679,7 @@ function init() {
     // 저장된 데이터 로드
     APP_STATE.currentUser = StorageManager.loadCurrentUser();
     if (!APP_STATE.currentUser) {
-        window.location.href = 'login.html';
+        window.location.href = 'splash.html';
         return;
     }
 
@@ -3081,7 +3081,7 @@ function handleLogout() {
         elements.sidebar.classList.remove('active', 'collapsed');
     }
     hideSidebarOverlay();
-    window.location.href = 'login.html';
+    window.location.href = 'splash.html';
 }
 
 // 모달 관리

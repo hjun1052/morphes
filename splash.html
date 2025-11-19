@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MORPHES</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* 물감처럼 퍼지는 그라디언트 배경 - 더욱 역동적으로 */
+        .gradient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg,
+                #FF6B35 0%,
+                #FF8960 15%,
+                #FFB88C 30%,
+                #FF9F6D 45%,
+                #FF7D4D 60%,
+                #FFB088 75%,
+                #FF8A5B 90%,
+                #FF6B35 100%);
+            background-size: 400% 400%;
+            animation: gradientFlow 20s ease infinite;
+        }
+
+        @keyframes gradientFlow {
+            0% { background-position: 0% 50%; }
+            20% { background-position: 30% 70%; }
+            40% { background-position: 70% 80%; }
+            60% { background-position: 100% 50%; }
+            80% { background-position: 70% 20%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 물감 퍼지는 효과 오버레이 - 다층 구조 */
+        .gradient-bg::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%,
+                rgba(255, 200, 150, 0.5) 0%,
+                rgba(255, 140, 90, 0.4) 15%,
+                transparent 40%);
+            animation: flowOverlay1 25s ease-in-out infinite;
+        }
+
+        @keyframes flowOverlay1 {
+            0%, 100% {
+                transform: translate(0%, 0%) scale(1) rotate(0deg);
+                opacity: 0.7;
+            }
+            25% { transform: translate(15%, 20%) scale(1.2) rotate(90deg); opacity: 0.9; }
+            50% { transform: translate(-10%, 15%) scale(0.9) rotate(180deg); opacity: 0.6; }
+            75% { transform: translate(20%, -10%) scale(1.1) rotate(270deg); opacity: 0.8; }
+        }
+
+        .gradient-bg::after {
+            content: '';
+            position: absolute;
+            bottom: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 70% 60%,
+                rgba(255, 180, 120, 0.4) 0%,
+                rgba(255, 120, 70, 0.3) 20%,
+                transparent 45%);
+            animation: flowOverlay2 30s ease-in-out infinite reverse;
+        }
+
+        @keyframes flowOverlay2 {
+            0%, 100% {
+                transform: translate(0%, 0%) scale(1) rotate(0deg);
+                opacity: 0.6;
+            }
+            33% { transform: translate(-20%, -15%) scale(1.15) rotate(-120deg); opacity: 0.8; }
+            66% { transform: translate(15%, 10%) scale(0.95) rotate(120deg); opacity: 0.7; }
+        }
+
+        /* 파티클 효과 */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: float 20s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translate(0, 0) scale(1);
+                opacity: 0;
+            }
+            10% { opacity: 0.6; }
+            90% { opacity: 0.6; }
+            50% {
+                transform: translate(var(--tx), var(--ty)) scale(1.5);
+                opacity: 0.8;
+            }
+        }
+
+        /* 스플래시 컨테이너 */
+        .splash-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        /* 로고 컨테이너 - 3D 효과 */
+        .logo-container {
+            position: relative;
+            opacity: 0;
+            animation: logoFadeIn 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
+            transform-style: preserve-3d;
+            perspective: 1000px;
+        }
+
+        .logo-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 280px;
+            height: 280px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.6; }
+        }
+
+        .logo-container img {
+            width: 220px;
+            height: 220px;
+            filter: blur(30px) brightness(1.2);
+            animation: logoBlurIn 3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
+            position: relative;
+            z-index: 2;
+        }
+
+        @keyframes logoFadeIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.7) translateY(30px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        @keyframes logoBlurIn {
+            0% {
+                filter: blur(30px) brightness(1.2);
+                transform: scale(0.85) rotateX(10deg);
+            }
+            70% {
+                filter: blur(0px) brightness(1.1);
+                transform: scale(1.08) rotateX(0deg);
+            }
+            100% {
+                filter: blur(0px) brightness(1);
+                transform: scale(1) rotateX(0deg);
+            }
+        }
+
+        /* 로딩 인디케이터 - 프리미엄 디자인 */
+        .loading-indicator {
+            margin-top: 80px;
+            opacity: 0;
+            animation: loadingFadeIn 1s ease-out 2.8s forwards;
+        }
+
+        @keyframes loadingFadeIn {
+            to { opacity: 1; }
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+        }
+
+        .loading-dot {
+            width: 14px;
+            height: 14px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5),
+                        0 0 40px rgba(255, 107, 53, 0.3);
+            animation: dotPulse 1.6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .loading-dot:nth-child(1) { animation-delay: 0s; }
+        .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dotPulse {
+            0%, 80%, 100% {
+                transform: scale(0.7) translateY(0);
+                opacity: 0.6;
+            }
+            40% {
+                transform: scale(1.3) translateY(-10px);
+                opacity: 1;
+                box-shadow: 0 0 30px rgba(255, 255, 255, 0.8),
+                            0 0 60px rgba(255, 107, 53, 0.5);
+            }
+        }
+
+        /* 유리 질감 로그인 카드 - 프리미엄 글래스모피즘 */
+        .login-card {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: 90%;
+            max-width: 460px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(40px) saturate(100%);
+            -webkit-backdrop-filter: blur(40px) saturate(200%);
+            border-radius: 40px;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.2),
+                0 8px 20px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+            padding: 56px 48px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .login-card.visible {
+            opacity: 1;
+            pointer-events: all;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* 카드 상단 빛 반사 효과 */
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 2px;
+            background: linear-gradient(90deg,
+                transparent,
+                rgba(255, 255, 255, 0.7),
+                transparent);
+            border-radius: 50%;
+        }
+
+        /* 카드 뒷면 글로우 효과 */
+        .login-card::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center,
+                rgba(255, 255, 255, 0.1) 0%,
+                transparent 70%);
+            border-radius: 40px;
+            z-index: -1;
+            filter: blur(20px);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-header h1 {
+            font-size: 38px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.9) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 4px 30px rgba(255, 255, 255, 0.3);
+            letter-spacing: -0.5px;
+        }
+
+        .login-header p {
+            font-size: 17px;
+            color: rgba(255, 255, 255, 0.95);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .form-group label {
+            font-size: 15px;
+            font-weight: 700;
+            color: white;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            letter-spacing: 0.3px;
+        }
+
+        .form-group input {
+            padding: 18px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(15px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 18px;
+            font-size: 16px;
+            color: white;
+            font-weight: 500;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 500;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.28);
+            border-color: rgba(255, 255, 255, 0.6);
+            box-shadow:
+                0 12px 32px rgba(255, 255, 255, 0.2),
+                inset 0 2px 8px rgba(0, 0, 0, 0.05);
+            transform: translateY(-3px) scale(1.01);
+        }
+
+        .btn-login {
+            margin-top: 12px;
+            padding: 18px;
+            background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.98) 0%,
+                rgba(255, 255, 255, 0.95) 100%);
+            border: none;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 800;
+            color: #FF6B35;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow:
+                0 12px 32px rgba(0, 0, 0, 0.18),
+                0 4px 12px rgba(255, 107, 53, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-login::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 107, 53, 0.1);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn-login:hover {
+            background: linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.98) 100%);
+            transform: translateY(-4px) scale(1.02);
+            box-shadow:
+                0 16px 48px rgba(0, 0, 0, 0.25),
+                0 8px 20px rgba(255, 107, 53, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+        }
+
+        .btn-login:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-login:active {
+            transform: translateY(-1px) scale(1);
+        }
+
+        .login-footer {
+            margin-top: 28px;
+            text-align: center;
+        }
+
+        .login-footer p {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(15px);
+            padding: 14px 24px;
+            border-radius: 14px;
+            border: 1.5px solid rgba(255, 255, 255, 0.25);
+            font-weight: 600;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* 환영 메시지 - 프리미엄 애니메이션 */
+        .welcome-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .welcome-message.visible {
+            animation: welcomeAnimation 3.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes welcomeAnimation {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.85) translateY(20px);
+            }
+            15% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.08) translateY(-5px);
+            }
+            25% {
+                transform: translate(-50%, -50%) scale(1) translateY(0);
+            }
+            85% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1) translateY(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(1.15) translateY(-10px);
+            }
+        }
+
+        .welcome-message h2 {
+            font-size: 56px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.95) 50%, #FFFFFF 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .welcome-message p {
+            font-size: 22px;
+            color: rgba(255, 255, 255, 0.98);
+            font-weight: 700;
+            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            letter-spacing: 0.5px;
+        }
+
+        /* 페이드 아웃 */
+        .fade-out {
+            animation: fadeOut 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+        }
+
+        /* 숨김 상태 */
+        .hidden {
+            display: none !important;
+        }
+
+        /* 반응형 */
+        @media (max-width: 640px) {
+            .logo-container img {
+                width: 180px;
+                height: 180px;
+            }
+            .login-card {
+                padding: 44px 36px;
+                max-width: calc(100% - 40px);
+            }
+            .login-header h1 {
+                font-size: 32px;
+            }
+            .welcome-message h2 {
+                font-size: 42px;
+            }
+            .welcome-message p {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 물감 그라디언트 배경 -->
+    <div class="gradient-bg"></div>
+
+    <!-- 파티클 효과 -->
+    <div class="particles" id="particles"></div>
+
+    <!-- 스플래시 스크린 -->
+    <div class="splash-container" id="splash-screen">
+        <div class="logo-container">
+            <img src="logo.png" alt="MORPHES Logo">
+        </div>
+        <div class="loading-indicator">
+            <div class="loading-dots">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 유리 질감 로그인 카드 -->
+    <div class="login-card" id="login-card">
+        <div class="login-header">
+            <h1>MORPHES</h1>
+            <p>AI 프롬프트 재작성</p>
+        </div>
+
+        <form id="login-form" class="login-form">
+            <div class="form-group">
+                <label for="login-email">이메일</label>
+                <input type="email" id="login-email" placeholder="your@email.com" required autocomplete="email">
+            </div>
+
+            <div class="form-group">
+                <label for="login-password">비밀번호</label>
+                <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="btn-login">로그인</button>
+
+            <div class="login-footer">
+                <p>데모 계정: demo@MORPHES.com / demo1234</p>
+            </div>
+        </form>
+    </div>
+
+    <!-- 환영 메시지 -->
+    <div class="welcome-message" id="welcome-message">
+        <h2>환영합니다!</h2>
+        <p>MORPHES와 함께 시작하세요</p>
+    </div>
+
+    <script src="splash.js"></script>
+</body>
+</html>
