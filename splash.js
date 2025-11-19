@@ -139,13 +139,20 @@ function showWelcomeMessage() {
 
         // 3.5초 후 메인 페이지로 이동
         setTimeout(() => {
-            // 페이지 전환 효과
-            document.body.style.transition = 'opacity 0.6s ease';
+            // 부드러운 페이지 전환 효과
+            const gradientBg = document.querySelector('.gradient-bg');
+
+            if (gradientBg) {
+                gradientBg.style.transition = 'opacity 0.5s ease';
+                gradientBg.style.opacity = '1';
+            }
+
+            document.body.style.transition = 'opacity 0.5s ease';
             document.body.style.opacity = '0';
 
             setTimeout(() => {
                 window.location.href = 'index.html';
-            }, 600);
+            }, 500);
         }, 3500);
     }, 1000);
 }

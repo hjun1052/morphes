@@ -3061,8 +3061,27 @@ function completeAppLoading() {
     const body = document.body;
     if (!body) return;
     if (body.classList.contains('app-ready')) return;
-    body.classList.remove('app-loading');
-    body.classList.add('app-ready');
+
+    // 페이지 진입 애니메이션
+    const pageEnterOverlay = document.getElementById('page-enter-overlay');
+
+    // 약간의 지연 후 오버레이 페이드 아웃
+    setTimeout(() => {
+        if (pageEnterOverlay) {
+            pageEnterOverlay.classList.add('fade-out');
+        }
+
+        // 오버레이가 사라진 후 앱 표시
+        setTimeout(() => {
+            body.classList.remove('app-loading');
+            body.classList.add('app-ready');
+
+            // 오버레이 완전히 제거
+            if (pageEnterOverlay) {
+                pageEnterOverlay.classList.add('hidden');
+            }
+        }, 800);
+    }, 100);
 }
 
 // 로그아웃 처리
