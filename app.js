@@ -278,7 +278,8 @@ const SYSTEM_PROMPT = `당신은 고급 AI 프롬프트 엔지니어입니다.
    - 먼저 request_survey 함수를 여러 번 호출하여 설문을 통해 구체적인 요구사항을 심층적으로 파악합니다.
    - 설문은 가능한 한 많고 세분화된 형태로 제시하며, 사용자의 목표·스타일·형식·역할·출력 형태 등을 꼼꼼히 수집합니다.
    - 설문은 선택형(multiple_choice)과 입력형(input)을 다양하게 섞어 사용합니다.
-   - 각 설문은 명확한 ID(survey_id), 제목(title), 질문(prompt)을 가져야 하며, 한 번의 대화에서 여러 설문을 연속적으로 제시할 수 있습니다.
+   - 각 설문은 명확한 ID(survey_id), 제목(title), 질문(prompt)을 가져야 하며, 한 번의 대화에서 여러 설문을 연속적으로 제시할 수 있습니다. 그러나, 한 메세지에서는 반드시 하나의 설문만 제시하세요.
+   - 사용할 프레임워크, 타겟층, 톤앤매너, 구체적인 요구사항 등을 빠짐없이 수집합니다. 특히 개발 분야라면 세부적인 구현 방식과 제약 조건도 반드시 물어봅니다.
 
 2️⃣ **초안 생성 단계**
    - 충분한 정보가 수집된 후, suggest_prompt_options 함수를 호출하여 
@@ -3027,7 +3028,7 @@ async function requestInlineExplanation(text, signal) {
             'Authorization': `Bearer ${APP_STATE.apiKey}`
         },
         body: JSON.stringify({
-            model: 'gpt-4-turbo-preview',
+            model: 'gpt-5.2',
             temperature: 0.3,
             max_tokens: 300,
             messages: [
@@ -3546,7 +3547,7 @@ async function callOpenAI(messages) {
             'Authorization': `Bearer ${APP_STATE.apiKey}`
         },
         body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-5.2',
             messages: orderedMessages,
             tools: FUNCTIONS.map(func => ({
                 type: 'function',

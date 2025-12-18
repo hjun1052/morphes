@@ -182,33 +182,23 @@ function setupInputEffects() {
 
 // 페이지 로드 시 실행
 document.addEventListener('DOMContentLoaded', () => {
+    // 이미 로그인한 사용자는 바로 index.html로 리다이렉트
+    const existingUser = StorageManager.loadCurrentUser();
+    if (existingUser) {
+        // 스플래시 화면 없이 바로 index로 이동
+        window.location.replace('index.html');
+        return;
+    }
+
+    // 새 사용자만 스플래시 화면 표시
     // 파티클 생성
     createParticles();
 
     // 입력 필드 효과 설정
     setupInputEffects();
 
-    // 이미 로그인한 사용자는 환영 메시지 표시 후 바로 이동
-    const existingUser = StorageManager.loadCurrentUser();
-    if (existingUser) {
-        const splashScreen = document.getElementById('splash-screen');
-
-        // 스플래시만 표시하고 로그인 카드는 건너뜀
-        setTimeout(() => {
-            if (splashScreen) {
-                splashScreen.classList.add('fade-out');
-            }
-            setTimeout(() => {
-                if (splashScreen) {
-                    splashScreen.classList.add('hidden');
-                }
-                showWelcomeMessage();
-            }, 800);
-        }, 3500);
-    } else {
-        // 새 사용자는 스플래시 → 로그인 순서
-        initSplashSequence();
-    }
+    // 스플래시 → 로그인 순서
+    initSplashSequence();
 
     // 로그인 폼 이벤트 리스너
     const loginForm = document.getElementById('login-form');
