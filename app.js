@@ -3030,7 +3030,6 @@ async function requestInlineExplanation(text, signal) {
         body: JSON.stringify({
             model: 'gpt-5.2',
             temperature: 0.3,
-            max_tokens: 300,
             messages: [
                 {
                     role: 'system',
